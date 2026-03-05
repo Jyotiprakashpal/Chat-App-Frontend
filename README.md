@@ -42,3 +42,6 @@ Socket disconnects
 Remove user from memory
       ↓
 User is OFFLINE
+
+
+🟢 Online / Offline indicator 👀 Seen / Delivered ticks ⌨ Typing indicator 🕒 Last seen system 📱 WhatsApp-level UI 🏢 Production-level architecture

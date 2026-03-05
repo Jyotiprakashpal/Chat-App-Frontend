@@ -8,7 +8,7 @@ export const ENDPOINTS = {
   },
   // Chat endpoints
   CHAT: {
-    GET_CONVERSATIONS: '/api/chat/conversations',
+    GET_CONVERSATIONS: '/api/messages/conversations',
     GET_MESSAGES: '/api/chat/messages',
     SEND_MESSAGE: '/api/chat/message',
   },
@@ -16,6 +16,6 @@ export const ENDPOINTS = {
   USER: {
     GET_PROFILE: '/api/user/profile',
     UPDATE_PROFILE: '/api/user/profile',
-    GET_USERS: '/api/users',
+    GET_USERS: '/api/auth/users',
   },
 };

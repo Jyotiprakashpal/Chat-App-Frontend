@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useEffect, useState } from "react";
+import { BASE_URL } from "../services/api/baseurl";
+import { ENDPOINTS } from "../services/api/endpoints";
 
 interface User {
   _id: string;
@@ -48,7 +50,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const login = async (email: string, password: string) => {
     try {
       // Make API call to login endpoint
-      const response = await fetch("http://localhost:5000/api/auth/login", {
+      const response = await fetch(`${BASE_URL}${ENDPOINTS.AUTH.LOGIN}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
