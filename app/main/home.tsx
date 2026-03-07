@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useContext, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { AuthContext } from "../context/Authcontext";
+import { ENDPOINTS } from "../services/api/endpoints";
 import API from "../services/api/method";
 import AllUserModal from "./chat/Utility/alluser";
 
@@ -67,6 +69,10 @@ export default function Home() {
   // ✅ NEW: Mobile menu state + Mobile chat modal state
   const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
   const [mobileChatVisible, setMobileChatVisible] = useState(false);
+
+  // ✅ NEW: Message input state
+  const [message, setMessage] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const fetchCurrentUser = useCallback(async () => {
     try {
@@ -131,9 +137,39 @@ export default function Home() {
   const handleBackToConversations = useCallback(() => {
     setMobileChatVisible(false);
     setSelectedUser(null);
+    setMessage("");
   }, []);
 
+  // ✅ NEW: Handle sending message
+  const handleSendMessage = useCallback(async () => {
+    if (!message.trim() || !selectedUser) {
+      Alert.alert("Error", "Please select a user and enter a message");
+      return;
+    }
+
+    try {
+      setSendingMessage(true);
+      await API.post(ENDPOINTS.CHAT.MESSAGES, {
+        recipient: selectedUser.email,
+        content: message.trim()
+      });
+      
+      // Clear message after sending
+      setMessage("");
+      
+      // Refresh conversations to show the new message
+      fetchConversations(true);
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to send message");
+    } finally {
+      setSendingMessage(false);
+    }
+  }, [message, selectedUser, fetchConversations]);
+
   const getOtherParticipant = useCallback((conversation: Conversation): User | undefined => {
+    if (!conversation.participants || !Array.isArray(conversation.participants)) {
+      return undefined;
+    }
     return conversation.participants.find((p) => p._id !== authUser?._id && p.email !== authUser?.email);
   }, [authUser?._id, authUser?.email]);
 
@@ -372,8 +408,14 @@ export default function Home() {
             style={styles.mobileChatInput}
             placeholder="Type a message..."
             placeholderTextColor="#94A3B8"
+            value={message}
+            onChangeText={setMessage}
           />
-          <TouchableOpacity style={styles.mobileSendButton}>
+          <TouchableOpacity 
+            style={[styles.mobileSendButton, sendingMessage && styles.sendButtonDisabled]}
+            onPress={handleSendMessage}
+            disabled={sendingMessage}
+          >
             <Ionicons name="send" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -486,8 +528,14 @@ export default function Home() {
                     style={styles.chatInput}
                     placeholder="Type a message..."
                     placeholderTextColor="#94A3B8"
+                    value={message}
+                    onChangeText={setMessage}
                   />
-                  <TouchableOpacity style={styles.sendButton}>
+                  <TouchableOpacity 
+                    style={[styles.sendButton, sendingMessage && styles.sendButtonDisabled]}
+                    onPress={handleSendMessage}
+                    disabled={sendingMessage}
+                  >
                     <Ionicons name="send" size={20} color="#fff" />
                   </TouchableOpacity>
                 </View>
@@ -713,6 +761,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#4F46E5",
     justifyContent: "center",
     alignItems: "center",
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
   
   // MOBILE HEADER & SEARCH
