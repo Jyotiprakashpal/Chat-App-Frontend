@@ -62,9 +62,11 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [usersModalVisible, setUsersModalVisible] = useState<boolean>(false);
-  
-  // ✅ NEW: Chat preview state for right panel
   const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
+  
+  // ✅ NEW: Mobile menu state + Mobile chat modal state
+  const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
+  const [mobileChatVisible, setMobileChatVisible] = useState(false);
 
   const fetchCurrentUser = useCallback(async () => {
     try {
@@ -100,9 +102,35 @@ export default function Home() {
     }
   };
 
-  // ✅ NEW: Handle user selection from modal or conversation click
+  // ✅ UPDATED: Handle mobile menu item press
+  const handleMobileMenuItemPress = useCallback((action: string) => {
+    setMobileMenuVisible(false);
+    
+    switch (action) {
+      case 'newChat':
+        setUsersModalVisible(true);
+        break;
+      case 'logout':
+        handleLogout();
+        break;
+      default:
+        console.log(`Navigate to ${action}`);
+        break;
+    }
+  }, [handleLogout]);
+
+  // ✅ UPDATED: Handle user selection - Different behavior for mobile/desktop
   const handleUserSelect = useCallback((user: SelectedUser) => {
     setSelectedUser(user);
+    if (!isTabletOrWeb) {
+      setMobileChatVisible(true); // Show full screen chat on mobile
+    }
+  }, [isTabletOrWeb]);
+
+  // ✅ NEW: Close mobile chat and go back to conversations
+  const handleBackToConversations = useCallback(() => {
+    setMobileChatVisible(false);
+    setSelectedUser(null);
   }, []);
 
   const getOtherParticipant = useCallback((conversation: Conversation): User | undefined => {
@@ -163,12 +191,16 @@ export default function Home() {
         style={styles.chatItem}
         onPress={() => {
           if (otherUser) {
-            // ✅ Show preview in right panel instead of navigation
-            setSelectedUser({
+            const userData = {
               id: otherUser._id || otherUser.email,
               name: otherUser.name || otherUser.username || "Unknown",
               email: otherUser.email
-            });
+            };
+            setSelectedUser(userData);
+            // ✅ Show full screen chat on mobile
+            if (!isTabletOrWeb) {
+              setMobileChatVisible(true);
+            }
           }
         }}
         activeOpacity={0.7}
@@ -204,7 +236,7 @@ export default function Home() {
         <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
       </TouchableOpacity>
     );
-  }, [getOtherParticipant, formatTime, authUser?.email]);
+  }, [getOtherParticipant, formatTime, authUser?.email, isTabletOrWeb]);
 
   if (loading && !refreshing) {
     return (
@@ -213,6 +245,141 @@ export default function Home() {
       </View>
     );
   }
+
+  // ✅ Mobile Header Component
+  const renderMobileHeader = () => (
+    <View style={styles.header}>
+      <Text style={styles.title}>JyoChat</Text>
+      <TouchableOpacity 
+        style={styles.headerButton} 
+        onPress={() => setMobileMenuVisible(true)}
+      >
+        <Ionicons name="ellipsis-vertical" size={24} color="#0F172A" />
+      </TouchableOpacity>
+    </View>
+  );
+
+  // ✅ Mobile Menu Modal
+  const renderMobileMenu = () => (
+    <>
+      <TouchableOpacity 
+        style={styles.menuBackdrop}
+        activeOpacity={1}
+        onPress={() => setMobileMenuVisible(false)}
+      />
+      <View style={styles.mobileMenu}>
+        <View style={styles.mobileMenuHeader}>
+          <Text style={styles.mobileMenuTitle}>Menu</Text>
+          <TouchableOpacity onPress={() => setMobileMenuVisible(false)}>
+            <Ionicons name="close" size={24} color="#64748B" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.mobileMenuItems}>
+          <TouchableOpacity 
+            style={styles.mobileMenuItem}
+            onPress={() => handleMobileMenuItemPress('profile')}
+          >
+            <Ionicons name="person-circle-outline" size={24} color="#4F46E5" />
+            <Text style={styles.mobileMenuItemText}>Profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.mobileMenuItem}
+            onPress={() => handleMobileMenuItemPress('newChat')}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={24} color="#4F46E5" />
+            <Text style={styles.mobileMenuItemText}>New Chat</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.mobileMenuItem}
+            onPress={() => handleMobileMenuItemPress('contacts')}
+          >
+            <Ionicons name="people-outline" size={24} color="#64748B" />
+            <Text style={styles.mobileMenuItemText}>Contacts</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.mobileMenuItem}
+            onPress={() => handleMobileMenuItemPress('notifications')}
+          >
+            <Ionicons name="notifications-outline" size={24} color="#64748B" />
+            <Text style={styles.mobileMenuItemText}>Notifications</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.mobileMenuItem}
+            onPress={() => handleMobileMenuItemPress('settings')}
+          >
+            <Ionicons name="settings-outline" size={24} color="#64748B" />
+            <Text style={styles.mobileMenuItemText}>Settings</Text>
+          </TouchableOpacity>
+          <View style={styles.menuDivider} />
+          <TouchableOpacity 
+            style={styles.mobileMenuLogout}
+            onPress={() => handleMobileMenuItemPress('logout')}
+          >
+            <Ionicons name="log-out-outline" size={24} color="#EF4444" />
+            <Text style={styles.mobileMenuLogoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+
+  // ✅ NEW: Mobile Full Screen Chat Modal
+  const renderMobileChat = () => (
+    <>
+      <TouchableOpacity 
+        style={styles.chatBackdrop}
+        activeOpacity={1}
+        onPress={handleBackToConversations}
+      />
+      <View style={styles.mobileChatContainer}>
+        {/* Chat Header with Back Button */}
+        <View style={styles.mobileChatHeader}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={handleBackToConversations}
+          >
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          {selectedUser && (
+            <>
+              <View style={styles.mobileChatHeaderInfo}>
+                <Text style={styles.mobileChatHeaderName}>{selectedUser.name}</Text>
+                <Text style={styles.mobileChatHeaderStatus}>Online</Text>
+              </View>
+              <View style={styles.mobileChatHeaderAvatar}>
+                <Text style={styles.mobileChatHeaderAvatarText}>
+                  {selectedUser.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Messages Container */}
+        <View style={styles.mobileMessagesContainer}>
+          <View style={styles.noMessages}>
+            <Ionicons name="chatbubble-outline" size={64} color="#CBD5E1" />
+            <Text style={styles.noMessagesText}>No messages yet</Text>
+            <Text style={styles.noMessagesSubtext}>
+              Start a conversation with {selectedUser?.name}
+            </Text>
+          </View>
+        </View>
+
+        {/* Chat Input */}
+        <View style={styles.mobileChatInputContainer}>
+          <TextInput
+            style={styles.mobileChatInput}
+            placeholder="Type a message..."
+            placeholderTextColor="#94A3B8"
+          />
+          <TouchableOpacity style={styles.mobileSendButton}>
+            <Ionicons name="send" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
 
   return (
     <View style={[styles.container, isTabletOrWeb && styles.containerLarge]}>
@@ -224,27 +391,22 @@ export default function Home() {
               <TouchableOpacity style={styles.profileIcon}>
                 <Ionicons name="person-circle-outline" size={36} color="#4F46E5" />
               </TouchableOpacity>
-              
               <TouchableOpacity 
                 style={styles.sidebarIconBtn}
                 onPress={() => setUsersModalVisible(true)}
               >
                 <Ionicons name="chatbubble-ellipses-outline" size={28} color="#4F46E5" />
               </TouchableOpacity>
-              
               <TouchableOpacity style={styles.sidebarIconBtn}>
                 <Ionicons name="people-outline" size={28} color="#64748B" />
               </TouchableOpacity>
-              
               <TouchableOpacity style={styles.sidebarIconBtn}>
                 <Ionicons name="notifications-outline" size={28} color="#64748B" />
               </TouchableOpacity>
-              
               <TouchableOpacity style={styles.sidebarIconBtn}>
                 <Ionicons name="settings-outline" size={28} color="#64748B" />
               </TouchableOpacity>
             </View>
-
             <View style={styles.sidebarBottom}>
               <TouchableOpacity 
                 style={styles.logoutBtn}
@@ -260,7 +422,6 @@ export default function Home() {
             <View style={styles.header}>
               <Text style={styles.title}>JyoChat</Text>
             </View>
-
             <View style={styles.searchContainer}>
               <Ionicons name="search-outline" size={18} color="#94A3B8" />
               <TextInput
@@ -271,7 +432,6 @@ export default function Home() {
                 placeholderTextColor="#94A3B8"
               />
             </View>
-
             {filteredConversations.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="chatbubbles-outline" size={48} color="#CBD5E1" />
@@ -300,7 +460,6 @@ export default function Home() {
           {/* Right Panel - Chat Preview (70%) */}
           <View style={styles.rightPanel}>
             {selectedUser ? (
-              // ✅ ACTIVE CHAT PREVIEW
               <View style={styles.chatPreviewContainer}>
                 <View style={styles.chatHeader}>
                   <View style={styles.chatHeaderAvatar}>
@@ -313,7 +472,6 @@ export default function Home() {
                     <Text style={styles.chatHeaderStatus}>Online</Text>
                   </View>
                 </View>
-
                 <View style={styles.messagesContainer}>
                   <View style={styles.noMessages}>
                     <Ionicons name="chatbubble-outline" size={64} color="#CBD5E1" />
@@ -323,7 +481,6 @@ export default function Home() {
                     </Text>
                   </View>
                 </View>
-
                 <View style={styles.chatInputContainer}>
                   <TextInput
                     style={styles.chatInput}
@@ -336,7 +493,6 @@ export default function Home() {
                 </View>
               </View>
             ) : (
-              // DEFAULT PLACEHOLDER
               <View style={styles.placeholderContent}>
                 <Ionicons name="chatbubbles-outline" size={80} color="#CBD5E1" />
                 <Text style={styles.placeholderTitle}>Welcome to JyoChat</Text>
@@ -348,15 +504,9 @@ export default function Home() {
           </View>
         </>
       ) : (
-        // Mobile Layout
+        // Mobile Layout - Conversations List
         <>
-          <View style={styles.header}>
-            <Text style={styles.title}>JyoChat</Text>
-            <TouchableOpacity style={styles.headerButton} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={24} color="#EF4444" />
-            </TouchableOpacity>
-          </View>
-
+          {renderMobileHeader()}
           <View style={styles.searchContainer}>
             <Ionicons name="search-outline" size={18} color="#94A3B8" />
             <TextInput
@@ -367,7 +517,6 @@ export default function Home() {
               placeholderTextColor="#94A3B8"
             />
           </View>
-
           {filteredConversations.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="chatbubbles-outline" size={64} color="#CBD5E1" />
@@ -394,12 +543,18 @@ export default function Home() {
         </>
       )}
 
-      {/* ✅ Pass handleUserSelect to modal */}
+      {/* AllUserModal */}
       <AllUserModal
         visible={usersModalVisible}
         onClose={() => setUsersModalVisible(false)}
         onUserSelect={handleUserSelect}
       />
+
+      {/* ✅ MOBILE MENU MODAL */}
+      {mobileMenuVisible && !isTabletOrWeb && renderMobileMenu()}
+
+      {/* ✅ MOBILE FULL SCREEN CHAT MODAL */}
+      {mobileChatVisible && !isTabletOrWeb && selectedUser && renderMobileChat()}
     </View>
   );
 }
@@ -415,7 +570,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   
-  // SIDEBAR - PERFECT WHATSAPP LAYOUT
+  // SIDEBAR
   sidebar: {
     width: 80,
     backgroundColor: "#F8FAFC",
@@ -462,18 +617,18 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   
-  // LAYOUT WIDTHS - PERFECT PROPORTIONS
+  // DESKTOP LAYOUT
   mainContent: {
-    flex: 0.3, // Middle conversations = 30%
+    flex: 0.3,
     paddingHorizontal: 24,
     paddingVertical: 20,
   },
   rightPanel: {
-    flex: 0.7, // Right chat preview = 70%
+    flex: 0.7,
     backgroundColor: "#fff",
   },
   
-  // CHAT PREVIEW STYLES
+  // CHAT PREVIEW (Desktop)
   chatPreviewContainer: {
     flex: 1,
   },
@@ -560,7 +715,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   
-  // HEADER & SEARCH
+  // MOBILE HEADER & SEARCH
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -711,5 +866,171 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#64748B",
     textAlign: "center",
+  },
+
+  // MOBILE MENU STYLES
+  menuBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+  },
+  mobileMenu: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 280,
+    height: '100%',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1001,
+  },
+  mobileMenuHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  mobileMenuTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  mobileMenuItems: {
+    flex: 1,
+    paddingTop: 8,
+  },
+  mobileMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 16,
+  },
+  mobileMenuItemText: {
+    fontSize: 16,
+    color: '#1E293B',
+    flex: 1,
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 20,
+  },
+  mobileMenuLogout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 16,
+  },
+  mobileMenuLogoutText: {
+    fontSize: 16,
+    color: '#EF4444',
+    fontWeight: '500',
+  },
+
+  // ✅ NEW MOBILE FULL SCREEN CHAT STYLES
+  chatBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 2000,
+  },
+  mobileChatContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#fff',
+    zIndex: 2001,
+  },
+  mobileChatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#4F46E5',
+    elevation: 4,
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12,
+  },
+  mobileChatHeaderInfo: {
+    flex: 1,
+  },
+  mobileChatHeaderName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  mobileChatHeaderStatus: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
+  },
+  mobileChatHeaderAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mobileChatHeaderAvatarText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  mobileMessagesContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  mobileChatInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  mobileChatInput: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#1E293B',
+    marginRight: 12,
+    maxHeight: 100,
+  },
+  mobileSendButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#4F46E5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
