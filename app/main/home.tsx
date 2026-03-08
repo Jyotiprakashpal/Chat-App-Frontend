@@ -28,11 +28,19 @@ interface User {
 
 interface Conversation {
   _id: string;
-  participants: User[];
+  partnerId?: string;
+  participants?: User[];
+  partner?: User;
+  unreadCount?: number;
   lastMessage?: {
-    text: string;
+    _id?: string;
+    text?: string;
+    content?: string;
     sender: string;
+    recipient?: string;
+    read?: boolean;
     createdAt: string;
+    updatedAt?: string;
   };
   updatedAt: string;
 }
@@ -150,10 +158,20 @@ export default function Home() {
   }, [message, selectedUser, fetchConversations]);
 
   const getOtherParticipant = useCallback((conversation: Conversation): User | undefined => {
-    if (!conversation.participants || !Array.isArray(conversation.participants)) {
-      return undefined;
+    // First, try to get from partner field (API response format)
+    if (conversation.partner) {
+      // Make sure it's not the current user
+      if (conversation.partner._id !== authUser?._id && conversation.partner.email !== authUser?.email) {
+        return conversation.partner;
+      }
     }
-    return conversation.participants.find((p) => p._id !== authUser?._id && p.email !== authUser?.email);
+    
+    // Fallback to participants array if available
+    if (conversation.participants && Array.isArray(conversation.participants)) {
+      return conversation.participants.find((p) => p._id !== authUser?._id && p.email !== authUser?.email);
+    }
+    
+    return undefined;
   }, [authUser?._id, authUser?.email]);
 
   const formatTime = useCallback((dateString: string): string => {
@@ -197,7 +215,7 @@ export default function Home() {
   }, [search, conversations, getOtherParticipant]);
 
   const keyExtractor = useCallback((item: Conversation) => {
-    return item._id || item.participants?.[0]?._id || `conv-${Math.random()}`;
+    return item._id || item.partnerId || item.participants?.[0]?._id || `conv-${Math.random()}`;
   }, []);
 
   const renderItem = useCallback(({ item }: { item: Conversation }) => {
@@ -243,7 +261,7 @@ export default function Home() {
           {item.lastMessage ? (
             <Text style={styles.lastMessage} numberOfLines={1}>
               {item.lastMessage.sender === authUser?.email ? "You: " : ""}
-              {item.lastMessage.text}
+              {item.lastMessage.text || item.lastMessage.content}
             </Text>
           ) : (
             <Text style={styles.lastMessage}>No messages yet</Text>
