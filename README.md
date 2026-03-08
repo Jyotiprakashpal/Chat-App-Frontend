@@ -190,3 +190,15 @@ chat-app-backend
 ├── conversations
 │
 └── messages
+
+
+# 1️⃣ Production Level Features
+
+Online / Offline status
+Typing indicator
+Read receipts
+Delivered ticks
+Push notifications
+Media messages
+Message reactions
+Group chats

@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { AuthContext } from "../../context/Authcontext";
+import ENDPOINTS from "../../services/api/endpoints";
 import API from "../../services/api/method";
 import socket from "../../services/socket";
 
@@ -35,7 +36,8 @@ export default function ChatScreen() {
   // ✅ Fetch Messages
   const fetchMessages = async () => {
     try {
-      const res = await API.get(`/messages/${id}`);
+      const token = await AsyncStorage.getItem("token");
+      const res = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${id}`, undefined, token ?? undefined);
       setMessages(res.data);
     } catch (error) {
       console.log("Fetch error:", error);
@@ -79,7 +81,7 @@ export default function ChatScreen() {
       const token = await AsyncStorage.getItem("token");
       
       // Make the API call with explicit token passing (convert null to undefined)
-      await API.post("/messages", messageData, token ?? undefined);
+      await API.post(ENDPOINTS.CHAT.MESSAGES, messageData, token ?? undefined);
 
       // Also emit via socket for real-time updates
       socket.emit("sendMessage", {
