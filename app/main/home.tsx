@@ -26,13 +26,6 @@ interface User {
   email: string;
 }
 
-interface CurrentUser {
-  _id: string;
-  name: string;
-  email: string;
-  status?: string;
-}
-
 interface Conversation {
   _id: string;
   participants: User[];
@@ -62,32 +55,23 @@ export default function Home() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [search, setSearch] = useState("");
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [usersModalVisible, setUsersModalVisible] = useState<boolean>(false);
   const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
   
-  // ✅ NEW: Mobile menu state + Mobile chat modal state
+  // ✅ Mobile menu state + Mobile chat modal state
   const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
   const [mobileChatVisible, setMobileChatVisible] = useState(false);
 
-  // ✅ NEW: Message input state
+  // ✅ Message input state
   const [message, setMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
 
-  const fetchCurrentUser = useCallback(async () => {
-    try {
-      const userData = await API.get("/auth/me");
-      setCurrentUser(userData.data || userData);
-  } catch (error) {
-      // Error fetching current user
-    }
-  }, []);
-
+  // ✅ Fetch conversations using ENDPOINTS
   const fetchConversations = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
-      const res = await API.get("/messages/conversations");
+      const res = await API.get(ENDPOINTS.CHAT.GET_CONVERSATIONS);
       const convData = res.data?.conversations || res.data || res || [];
       setConversations(convData);
       setFilteredConversations(convData);
@@ -108,7 +92,7 @@ export default function Home() {
     }
   };
 
-  // ✅ UPDATED: Handle mobile menu item press
+  // ✅ Handle mobile menu item press
   const handleMobileMenuItemPress = useCallback((action: string) => {
     setMobileMenuVisible(false);
     
@@ -120,12 +104,11 @@ export default function Home() {
         handleLogout();
         break;
       default:
-        // Navigate to ${action}
         break;
     }
   }, [handleLogout]);
 
-  // ✅ UPDATED: Handle user selection - Different behavior for mobile/desktop
+  // ✅ Handle user selection - Different behavior for mobile/desktop
   const handleUserSelect = useCallback((user: SelectedUser) => {
     setSelectedUser(user);
     if (!isTabletOrWeb) {
@@ -133,14 +116,14 @@ export default function Home() {
     }
   }, [isTabletOrWeb]);
 
-  // ✅ NEW: Close mobile chat and go back to conversations
+  // ✅ Close mobile chat and go back to conversations
   const handleBackToConversations = useCallback(() => {
     setMobileChatVisible(false);
     setSelectedUser(null);
     setMessage("");
   }, []);
 
-  // ✅ NEW: Handle sending message
+  // ✅ Handle sending message using ENDPOINTS
   const handleSendMessage = useCallback(async () => {
     if (!message.trim() || !selectedUser) {
       Alert.alert("Error", "Please select a user and enter a message");
@@ -192,14 +175,12 @@ export default function Home() {
   }, []);
 
   const handleRefresh = useCallback(() => {
-    fetchCurrentUser();
     fetchConversations(true);
-  }, [fetchCurrentUser, fetchConversations]);
+  }, [fetchConversations]);
 
   useEffect(() => {
-    fetchCurrentUser();
     fetchConversations();
-  }, [fetchCurrentUser, fetchConversations]);
+  }, [fetchConversations]);
 
   useEffect(() => {
     if (!conversations.length) return;
@@ -233,7 +214,6 @@ export default function Home() {
               email: otherUser.email
             };
             setSelectedUser(userData);
-            // ✅ Show full screen chat on mobile
             if (!isTabletOrWeb) {
               setMobileChatVisible(true);
             }
@@ -359,7 +339,7 @@ export default function Home() {
     </>
   );
 
-  // ✅ NEW: Mobile Full Screen Chat Modal
+  // ✅ Mobile Full Screen Chat Modal
   const renderMobileChat = () => (
     <>
       <TouchableOpacity 
@@ -368,7 +348,6 @@ export default function Home() {
         onPress={handleBackToConversations}
       />
       <View style={styles.mobileChatContainer}>
-        {/* Chat Header with Back Button */}
         <View style={styles.mobileChatHeader}>
           <TouchableOpacity 
             style={styles.backButton}
@@ -391,7 +370,6 @@ export default function Home() {
           )}
         </View>
 
-        {/* Messages Container */}
         <View style={styles.mobileMessagesContainer}>
           <View style={styles.noMessages}>
             <Ionicons name="chatbubble-outline" size={64} color="#CBD5E1" />
@@ -402,7 +380,6 @@ export default function Home() {
           </View>
         </View>
 
-        {/* Chat Input */}
         <View style={styles.mobileChatInputContainer}>
           <TextInput
             style={styles.mobileChatInput}
@@ -427,7 +404,6 @@ export default function Home() {
     <View style={[styles.container, isTabletOrWeb && styles.containerLarge]}>
       {isTabletOrWeb ? (
         <>
-          {/* Sidebar */}
           <View style={styles.sidebar}>
             <View style={styles.sidebarIconsGroup}>
               <TouchableOpacity style={styles.profileIcon}>
@@ -459,7 +435,6 @@ export default function Home() {
             </View>
           </View>
 
-          {/* Middle Content - Conversations (30%) */}
           <View style={styles.mainContent}>
             <View style={styles.header}>
               <Text style={styles.title}>JyoChat</Text>
@@ -499,7 +474,6 @@ export default function Home() {
             )}
           </View>
 
-          {/* Right Panel - Chat Preview (70%) */}
           <View style={styles.rightPanel}>
             {selectedUser ? (
               <View style={styles.chatPreviewContainer}>
@@ -552,7 +526,6 @@ export default function Home() {
           </View>
         </>
       ) : (
-        // Mobile Layout - Conversations List
         <>
           {renderMobileHeader()}
           <View style={styles.searchContainer}>
@@ -591,17 +564,14 @@ export default function Home() {
         </>
       )}
 
-      {/* AllUserModal */}
       <AllUserModal
         visible={usersModalVisible}
         onClose={() => setUsersModalVisible(false)}
         onUserSelect={handleUserSelect}
       />
 
-      {/* ✅ MOBILE MENU MODAL */}
       {mobileMenuVisible && !isTabletOrWeb && renderMobileMenu()}
 
-      {/* ✅ MOBILE FULL SCREEN CHAT MODAL */}
       {mobileChatVisible && !isTabletOrWeb && selectedUser && renderMobileChat()}
     </View>
   );
@@ -618,7 +588,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   
-  // SIDEBAR
   sidebar: {
     width: 80,
     backgroundColor: "#F8FAFC",
@@ -665,7 +634,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   
-  // DESKTOP LAYOUT
   mainContent: {
     flex: 0.3,
     paddingHorizontal: 24,
@@ -676,7 +644,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   
-  // CHAT PREVIEW (Desktop)
   chatPreviewContainer: {
     flex: 1,
   },
@@ -766,7 +733,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   
-  // MOBILE HEADER & SEARCH
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -805,7 +771,6 @@ const styles = StyleSheet.create({
     color: "#1E293B",
   },
   
-  // CHAT LIST
   listContainer: {
     paddingBottom: 100,
   },
@@ -875,7 +840,6 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   
-  // EMPTY STATES
   loader: {
     flex: 1,
     justifyContent: "center",
@@ -919,7 +883,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // MOBILE MENU STYLES
   menuBackdrop: {
     position: 'absolute',
     top: 0,
@@ -991,7 +954,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // ✅ NEW MOBILE FULL SCREEN CHAT STYLES
   chatBackdrop: {
     position: 'absolute',
     top: 0,

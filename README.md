@@ -23,6 +23,18 @@ chat-app/
 └── utils/
     └── storage.js
 
+# Differnce work of file
+
+home.js
+  │
+  │ user clicks chat
+  ▼
+chat/[id].js
+  │
+  │ load messages
+  ▼
+conversation screen
+
 
 
 # online strcture 
