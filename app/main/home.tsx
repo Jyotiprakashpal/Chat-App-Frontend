@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from "expo-router";
 import { useCallback, useContext, useEffect, useState } from "react";
 import {
@@ -422,9 +423,10 @@ export default function Home() {
     </>
   );
 
-  return (
-    <View style={[styles.container, isTabletOrWeb && styles.containerLarge]}>
-      {isTabletOrWeb ? (
+return (
+    <SafeAreaProvider>
+      <SafeAreaView style={[styles.container, isTabletOrWeb && styles.containerLarge]}>
+        {isTabletOrWeb ? (
         <>
           <View style={styles.sidebar}>
             <View style={styles.sidebarIconsGroup}>
@@ -600,7 +602,8 @@ export default function Home() {
         visible={logoutVisible}
         onClose={() => setLogoutVisible(false)}
       />
-    </View>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
