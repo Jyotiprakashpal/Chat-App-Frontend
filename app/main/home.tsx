@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { AuthContext } from "../context/Authcontext";
+import LogoutPopup from "../Popup/logout";
 import { ENDPOINTS } from "../services/api/endpoints";
 import API from "../services/api/method";
 import AllUserModal from "./chat/Utility/alluser";
@@ -65,11 +66,14 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [usersModalVisible, setUsersModalVisible] = useState<boolean>(false);
   const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
-  
-  // ✅ Mobile menu state + Mobile chat modal state
+  const [logoutVisible, setLogoutVisible] = useState(false);
+
+  // ✅ Logout popup state
   const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
   const [mobileChatVisible, setMobileChatVisible] = useState(false);
 
+
+  // ✅ Mobile menu state + Mobile chat modal state
   // ✅ Message input state
   const [message, setMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -103,13 +107,13 @@ export default function Home() {
   // ✅ Handle mobile menu item press
   const handleMobileMenuItemPress = useCallback((action: string) => {
     setMobileMenuVisible(false);
-    
+
     switch (action) {
       case 'newChat':
         setUsersModalVisible(true);
         break;
       case 'logout':
-        handleLogout();
+        setLogoutVisible(true);
         break;
       default:
         break;
@@ -144,10 +148,10 @@ export default function Home() {
         recipient: selectedUser.email,
         content: message.trim()
       });
-      
+
       // Clear message after sending
       setMessage("");
-      
+
       // Refresh conversations to show the new message
       fetchConversations(true);
     } catch (error: any) {
@@ -165,22 +169,22 @@ export default function Home() {
         return conversation.partner;
       }
     }
-    
+
     // Fallback to participants array if available
     if (conversation.participants && Array.isArray(conversation.participants)) {
       return conversation.participants.find((p) => p._id !== authUser?._id && p.email !== authUser?.email);
     }
-    
+
     return undefined;
   }, [authUser?._id, authUser?.email]);
 
   const formatTime = useCallback((dateString: string): string => {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return "Just now";
-    
+
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 0) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (diffDays === 1) {
@@ -202,13 +206,13 @@ export default function Home() {
 
   useEffect(() => {
     if (!conversations.length) return;
-    
+
     const filtered = conversations.filter((conv) => {
       const otherParticipant = getOtherParticipant(conv);
       const name = (otherParticipant?.name || otherParticipant?.username || "").toLowerCase();
       const email = otherParticipant?.email?.toLowerCase() || "";
       const searchLower = search.toLowerCase();
-      
+
       return name.includes(searchLower) || email.includes(searchLower);
     });
     setFilteredConversations(filtered);
@@ -220,7 +224,7 @@ export default function Home() {
 
   const renderItem = useCallback(({ item }: { item: Conversation }) => {
     const otherUser = getOtherParticipant(item);
-    
+
     return (
       <TouchableOpacity
         style={styles.chatItem}
@@ -241,9 +245,9 @@ export default function Home() {
       >
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
-            {otherUser?.name?.charAt(0).toUpperCase() || 
-             otherUser?.username?.charAt(0).toUpperCase() || 
-             otherUser?.email?.charAt(0).toUpperCase() || "?"}
+            {otherUser?.name?.charAt(0).toUpperCase() ||
+              otherUser?.username?.charAt(0).toUpperCase() ||
+              otherUser?.email?.charAt(0).toUpperCase() || "?"}
           </Text>
           <View style={styles.onlineDot} />
         </View>
@@ -253,8 +257,8 @@ export default function Home() {
               {otherUser?.name || otherUser?.username || "Unknown User"}
             </Text>
             <Text style={styles.time} numberOfLines={1}>
-              {item.lastMessage 
-                ? formatTime(item.lastMessage.createdAt || item.updatedAt) 
+              {item.lastMessage
+                ? formatTime(item.lastMessage.createdAt || item.updatedAt)
                 : formatTime(item.updatedAt)}
             </Text>
           </View>
@@ -284,8 +288,8 @@ export default function Home() {
   const renderMobileHeader = () => (
     <View style={styles.header}>
       <Text style={styles.title}>JyoChat</Text>
-      <TouchableOpacity 
-        style={styles.headerButton} 
+      <TouchableOpacity
+        style={styles.headerButton}
         onPress={() => setMobileMenuVisible(true)}
       >
         <Ionicons name="ellipsis-vertical" size={24} color="#0F172A" />
@@ -296,7 +300,7 @@ export default function Home() {
   // ✅ Mobile Menu Modal
   const renderMobileMenu = () => (
     <>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.menuBackdrop}
         activeOpacity={1}
         onPress={() => setMobileMenuVisible(false)}
@@ -309,35 +313,35 @@ export default function Home() {
           </TouchableOpacity>
         </View>
         <View style={styles.mobileMenuItems}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.mobileMenuItem}
             onPress={() => handleMobileMenuItemPress('profile')}
           >
             <Ionicons name="person-circle-outline" size={24} color="#4F46E5" />
             <Text style={styles.mobileMenuItemText}>Profile</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.mobileMenuItem}
             onPress={() => handleMobileMenuItemPress('newChat')}
           >
             <Ionicons name="chatbubble-ellipses-outline" size={24} color="#4F46E5" />
             <Text style={styles.mobileMenuItemText}>New Chat</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.mobileMenuItem}
             onPress={() => handleMobileMenuItemPress('contacts')}
           >
             <Ionicons name="people-outline" size={24} color="#64748B" />
             <Text style={styles.mobileMenuItemText}>Contacts</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.mobileMenuItem}
             onPress={() => handleMobileMenuItemPress('notifications')}
           >
             <Ionicons name="notifications-outline" size={24} color="#64748B" />
             <Text style={styles.mobileMenuItemText}>Notifications</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.mobileMenuItem}
             onPress={() => handleMobileMenuItemPress('settings')}
           >
@@ -345,7 +349,7 @@ export default function Home() {
             <Text style={styles.mobileMenuItemText}>Settings</Text>
           </TouchableOpacity>
           <View style={styles.menuDivider} />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.mobileMenuLogout}
             onPress={() => handleMobileMenuItemPress('logout')}
           >
@@ -360,14 +364,14 @@ export default function Home() {
   // ✅ Mobile Full Screen Chat Modal
   const renderMobileChat = () => (
     <>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.chatBackdrop}
         activeOpacity={1}
         onPress={handleBackToConversations}
       />
       <View style={styles.mobileChatContainer}>
         <View style={styles.mobileChatHeader}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.backButton}
             onPress={handleBackToConversations}
           >
@@ -406,7 +410,7 @@ export default function Home() {
             value={message}
             onChangeText={setMessage}
           />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.mobileSendButton, sendingMessage && styles.sendButtonDisabled]}
             onPress={handleSendMessage}
             disabled={sendingMessage}
@@ -427,7 +431,7 @@ export default function Home() {
               <TouchableOpacity style={styles.profileIcon}>
                 <Ionicons name="person-circle-outline" size={36} color="#4F46E5" />
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.sidebarIconBtn}
                 onPress={() => setUsersModalVisible(true)}
               >
@@ -444,9 +448,9 @@ export default function Home() {
               </TouchableOpacity>
             </View>
             <View style={styles.sidebarBottom}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.logoutBtn}
-                onPress={handleLogout}
+                onPress={() => setLogoutVisible(true)}
               >
                 <Ionicons name="log-out-outline" size={28} color="#EF4444" />
               </TouchableOpacity>
@@ -523,7 +527,7 @@ export default function Home() {
                     value={message}
                     onChangeText={setMessage}
                   />
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.sendButton, sendingMessage && styles.sendButtonDisabled]}
                     onPress={handleSendMessage}
                     disabled={sendingMessage}
@@ -591,6 +595,11 @@ export default function Home() {
       {mobileMenuVisible && !isTabletOrWeb && renderMobileMenu()}
 
       {mobileChatVisible && !isTabletOrWeb && selectedUser && renderMobileChat()}
+
+      <LogoutPopup
+        visible={logoutVisible}
+        onClose={() => setLogoutVisible(false)}
+      />
     </View>
   );
 }
@@ -605,7 +614,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 0,
   },
-  
+
   sidebar: {
     width: 80,
     backgroundColor: "#F8FAFC",
@@ -651,7 +660,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  
+
   mainContent: {
     flex: 0.3,
     paddingHorizontal: 24,
@@ -661,7 +670,7 @@ const styles = StyleSheet.create({
     flex: 0.7,
     backgroundColor: "#fff",
   },
-  
+
   chatPreviewContainer: {
     flex: 1,
   },
@@ -750,7 +759,7 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     opacity: 0.5,
   },
-  
+
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -788,7 +797,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#1E293B",
   },
-  
+
   listContainer: {
     paddingBottom: 100,
   },
@@ -857,7 +866,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#64748B",
   },
-  
+
   loader: {
     flex: 1,
     justifyContent: "center",
