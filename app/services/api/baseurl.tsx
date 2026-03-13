@@ -1,3 +1,5 @@
-// Base URL for the API
-export const BASE_URL = 'http://localhost:5000/api';
-// http://localhost:5000/api/auth/login
+export const BASE_URL = 'http://192.168.76.248:5000/api';
+
+// export const BASE_URL = 'http://localhost:5000/api';
+
+
