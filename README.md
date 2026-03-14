@@ -202,3 +202,9 @@ Push notifications
 Media messages
 Message reactions
 Group chats
+
+
+
+
+register.tsx -->call register api
+login screen -->call login api
