@@ -169,7 +169,19 @@ export default function Home() {
       // Clear message after sending
       setMessage("");
 
-      // Refresh conversations to show the new message
+      // Add new message to local chat state immediately
+      const newMessage: Message = {
+        _id: Date.now().toString(),
+        sender: authUser?._id || '',
+        recipient: selectedUser!.email,
+        content: message.trim(),
+        createdAt: new Date().toISOString(),
+        read: false,
+        updatedAt: new Date().toISOString(),
+      };
+      setChatMessages(prev => [...prev, newMessage]);
+      
+      // Refresh conversations list
       fetchConversations(true);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to send message");
@@ -455,7 +467,7 @@ export default function Home() {
               data={chatMessages}
               keyExtractor={(item) => item._id}
               renderItem={({ item }) => {
-                const isMyMessage = item.sender === authUser?.email;
+                      const isMyMessage = item.sender === authUser?._id;
                 return (
                   <View
                     style={[
@@ -601,7 +613,7 @@ return (
                       data={chatMessages}
                       keyExtractor={(item) => item._id}
                       renderItem={({ item }) => {
-                        const isMyMessage = item.sender === authUser?.email;
+                        const isMyMessage = item.sender === authUser?._id;
                         return (
                           <View
                             style={[
@@ -1228,9 +1240,8 @@ const styles = StyleSheet.create({
   },
   mobileMessagesContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   mobileChatInputContainer: {
     flexDirection: 'row',
