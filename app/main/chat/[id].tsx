@@ -16,14 +16,7 @@ import { AuthContext } from "../../context/Authcontext";
 import ENDPOINTS from "../../services/api/endpoints";
 import API from "../../services/api/method";
 import socket from "../../services/socket";
-
-interface Message {
-  _id: string;
-  senderEmail: string;
-  receiverEmail: string;
-  text: string;
-  createdAt: string;
-}
+import { Message } from "../../types/message";
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams(); // id = receiver email
@@ -36,11 +29,14 @@ export default function ChatScreen() {
   // ✅ Fetch Messages
   const fetchMessages = async () => {
     try {
+      console.log('Before fetchMessages for', id);
       const token = await AsyncStorage.getItem("token");
       const res = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${id}`, undefined, token ?? undefined);
-      setMessages(res.data);
+      console.log('After fetchMessages for', id);
+      setMessages(res.data || []);
     } catch (error) {
       console.log("Fetch error:", error);
+      setMessages([]);
     }
   };
 
@@ -51,14 +47,14 @@ export default function ChatScreen() {
 
     socket.emit("join", user?.email);
 
-    socket.on("receiveMessage", (message: Message) => {
-      if (
-        message.senderEmail === id ||
-        message.receiverEmail === id
-      ) {
-        setMessages((prev) => [...prev, message]);
-      }
-    });
+      socket.on("receiveMessage", (message: Message) => {
+        if (
+          message.sender === id ||
+          message.recipient === id
+        ) {
+          setMessages((prev) => [...prev, message]);
+        }
+      });
 
     return () => {
       socket.off("receiveMessage");
@@ -94,10 +90,12 @@ export default function ChatScreen() {
       // Add to local messages state for UI update
       const newMessage: Message = {
         _id: Date.now().toString(),
-        senderEmail: user.email,
-        receiverEmail: id as string,
-        text: text.trim(),
+        sender: user.email,
+        recipient: id as string,
+        content: text.trim(),
         createdAt: new Date().toISOString(),
+        read: false,
+        updatedAt: new Date().toISOString(),
       };
       
       setMessages((prev) => [...prev, newMessage]);
@@ -108,7 +106,7 @@ export default function ChatScreen() {
   };
 
   const renderItem = ({ item }: { item: Message }) => {
-    const isMyMessage = item.senderEmail === user?.email;
+    const isMyMessage = item.sender === user?.email;
 
     return (
       <View
@@ -118,7 +116,7 @@ export default function ChatScreen() {
         ]}
       >
         <Text style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
-          {item.text}
+          {item.content}
         </Text>
         <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
           {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useCallback, useContext, useEffect, useState } from "react";
 import {
@@ -14,10 +14,12 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from "../context/Authcontext";
 import LogoutPopup from "../Popup/logout";
 import { ENDPOINTS } from "../services/api/endpoints";
 import API from "../services/api/method";
+import { Message } from "../types/message";
 import AllUserModal from "./chat/Utility/alluser";
 
 // Types
@@ -72,6 +74,8 @@ export default function Home() {
   // ✅ Logout popup state
   const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
   const [mobileChatVisible, setMobileChatVisible] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [chatFlatListRef, setChatFlatListRef] = useState(null);
 
 
   // ✅ Mobile menu state + Mobile chat modal state
@@ -122,12 +126,24 @@ export default function Home() {
   }, [handleLogout]);
 
   // ✅ Handle user selection - Different behavior for mobile/desktop
-  const handleUserSelect = useCallback((user: SelectedUser) => {
+  const fetchChatMessages = useCallback(async (recipientEmail: string) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const response = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${recipientEmail}`, undefined, token ?? undefined);
+      setChatMessages(response.data || []);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      setChatMessages([]);
+    }
+  }, []);
+
+  const handleUserSelect = useCallback(async (user: SelectedUser) => {
+    await fetchChatMessages(user.email);
     setSelectedUser(user);
     if (!isTabletOrWeb) {
-      setMobileChatVisible(true); // Show full screen chat on mobile
+      setMobileChatVisible(true);
     }
-  }, [isTabletOrWeb]);
+  }, [isTabletOrWeb, fetchChatMessages]);
 
   // ✅ Close mobile chat and go back to conversations
   const handleBackToConversations = useCallback(() => {
@@ -229,8 +245,40 @@ export default function Home() {
     return (
       <TouchableOpacity
         style={styles.chatItem}
-        onPress={() => {
+        onPress={async () => {
           if (otherUser) {
+            console.log('🔥 CLICKED CHAT - START DEBUG');
+            console.log('otherUser:', otherUser);
+            console.log('Before API call:', `${ENDPOINTS.CHAT.MESSAGES}/${otherUser.email}`);
+            const token = await AsyncStorage.getItem("token");
+            console.log('Token:', token ? 'Present' : 'Missing');
+            const responseData = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${otherUser.email}`, undefined, token ?? undefined);
+            console.log('✅ API response data:', responseData);
+            console.log('responseData type:', typeof responseData, 'Array?', Array.isArray(responseData));
+            
+            // ✅ FIX: Update chatMessages state to show messages in UI
+            setChatMessages(responseData);
+            console.log('✅ setChatMessages called with', responseData.length, 'messages');
+            
+// Print all message contents - responseData is directly the array
+            console.log('📱 PRINTING MESSAGE CONTENTS:');
+            console.log('=== ALL MESSAGES ===');
+            if (Array.isArray(responseData)) {
+              responseData.forEach((msg: any, index: number) => {
+                console.log(`📨 Message ${index + 1}:`);
+                console.log(`   CONTENT: "${msg.content || 'NO CONTENT'}"`);
+                console.log(`   Sender: ${msg.sender}`);
+                console.log(`   Recipient: ${msg.recipient}`);
+                console.log(`   Created: ${msg.createdAt}`);
+                console.log('---');
+              });
+            } else {
+              console.log('❌ responseData is NOT array:', responseData);
+            }
+            console.log('Total messages:', Array.isArray(responseData) ? responseData.length : 0);
+            
+            console.log('After API call for', otherUser.email);
+            
             const userData = {
               id: otherUser._id || otherUser.email,
               name: otherUser.name || otherUser.username || "Unknown",
@@ -394,13 +442,40 @@ export default function Home() {
         </View>
 
         <View style={styles.mobileMessagesContainer}>
-          <View style={styles.noMessages}>
-            <Ionicons name="chatbubble-outline" size={64} color="#CBD5E1" />
-            <Text style={styles.noMessagesText}>No messages yet</Text>
-            <Text style={styles.noMessagesSubtext}>
-              Start a conversation with {selectedUser?.name}
-            </Text>
-          </View>
+          {chatMessages.length === 0 ? (
+            <View style={styles.noMessages}>
+              <Ionicons name="chatbubble-outline" size={64} color="#CBD5E1" />
+              <Text style={styles.noMessagesText}>No messages yet</Text>
+              <Text style={styles.noMessagesSubtext}>
+                Start a conversation with {selectedUser?.name}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={chatMessages}
+              keyExtractor={(item) => item._id}
+              renderItem={({ item }) => {
+                const isMyMessage = item.sender === authUser?.email;
+                return (
+                  <View
+                    style={[
+                      styles.messageContainer,
+                      isMyMessage ? styles.myMessage : styles.otherMessage,
+                    ]}
+                  >
+                    <Text style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
+                      {item.content}
+                    </Text>
+                    <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
+                      {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                );
+              }}
+              contentContainerStyle={styles.messagesList}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
         </View>
 
         <View style={styles.mobileChatInputContainer}>
@@ -512,14 +587,41 @@ return (
                     <Text style={styles.chatHeaderStatus}>Online</Text>
                   </View>
                 </View>
-                <View style={styles.messagesContainer}>
-                  <View style={styles.noMessages}>
-                    <Ionicons name="chatbubble-outline" size={64} color="#CBD5E1" />
-                    <Text style={styles.noMessagesText}>No messages yet</Text>
-                    <Text style={styles.noMessagesSubtext}>
-                      Start a conversation with {selectedUser.name}
-                    </Text>
-                  </View>
+                <View style={styles.chatMessagesContainer}>
+                  {chatMessages.length === 0 ? (
+                    <View style={styles.noMessages}>
+                      <Ionicons name="chatbubble-outline" size={64} color="#CBD5E1" />
+                      <Text style={styles.noMessagesText}>No messages yet</Text>
+                      <Text style={styles.noMessagesSubtext}>
+                        Start a conversation with {selectedUser.name}
+                      </Text>
+                    </View>
+                  ) : (
+                    <FlatList
+                      data={chatMessages}
+                      keyExtractor={(item) => item._id}
+                      renderItem={({ item }) => {
+                        const isMyMessage = item.sender === authUser?.email;
+                        return (
+                          <View
+                            style={[
+                              styles.chatMessageContainer,
+                              isMyMessage ? styles.chatMyMessage : styles.chatOtherMessage,
+                            ]}
+                          >
+                            <Text style={isMyMessage ? styles.chatMyMessageText : styles.chatOtherMessageText}>
+                              {item.content}
+                            </Text>
+                            <Text style={isMyMessage ? styles.chatMessageTime : styles.chatOtherMessageTime}>
+                              {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
+                          </View>
+                        );
+                      }}
+                      contentContainerStyle={styles.chatMessagesList}
+                      showsVerticalScrollIndicator={false}
+                    />
+                  )}
                 </View>
                 <View style={styles.chatInputContainer}>
                   <TextInput
@@ -761,6 +863,88 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+
+  // Message styles for chat preview and mobile chat
+  chatMessagesContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  chatMessagesList: {
+    paddingBottom: 100,
+  },
+  chatMessageContainer: {
+    maxWidth: '75%',
+    marginBottom: 10,
+  },
+  chatMyMessage: {
+    alignSelf: 'flex-end',
+  },
+  chatOtherMessage: {
+    alignSelf: 'flex-start',
+  },
+  chatMyMessageText: {
+    backgroundColor: '#4F46E5',
+    color: '#fff',
+    padding: 10,
+    borderRadius: 14,
+    marginBottom: 4,
+  },
+  chatOtherMessageText: {
+    backgroundColor: '#E5E7EB',
+    color: '#1E293B',
+    padding: 10,
+    borderRadius: 14,
+    marginBottom: 4,
+  },
+  chatMessageTime: {
+    fontSize: 10,
+    color: '#94A3B8',
+    textAlign: 'right',
+  },
+  chatOtherMessageTime: {
+    fontSize: 10,
+    color: '#94A3B8',
+    textAlign: 'left',
+  },
+  messagesList: {
+    paddingBottom: 100,
+  },
+  messageContainer: {
+    flex: 1,
+    padding: 16,
+    maxWidth: "75%",
+    marginBottom: 10,
+  },
+  myMessage: {
+    alignSelf: "flex-end",
+  },
+  otherMessage: {
+    alignSelf: "flex-start",
+  },
+  myMessageText: {
+    backgroundColor: "#4F46E5",
+    color: "#fff",
+    padding: 10,
+    borderRadius: 14,
+    marginBottom: 4,
+  },
+  otherMessageText: {
+    backgroundColor: "#E5E7EB",
+    color: "#1E293B",
+    padding: 10,
+    borderRadius: 14,
+    marginBottom: 4,
+  },
+  messageTime: {
+    fontSize: 10,
+    color: "#94A3B8",
+    textAlign: "right",
+  },
+  otherMessageTime: {
+    fontSize: 10,
+    color: "#94A3B8",
+    textAlign: "left",
   },
 
   header: {
