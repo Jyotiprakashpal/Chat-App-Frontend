@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -29,6 +29,11 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
+  
+  const nameRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
   
   // Validation errors
   const [nameError, setNameError] = useState("");
@@ -196,14 +201,18 @@ export default function Register() {
               <View style={[styles.inputContainer, nameError ? styles.inputError : null]}>
                 <Text style={styles.inputIcon}>👤</Text>
                 <TextInput
+                  ref={nameRef}
                   style={styles.input}
                   placeholder="Enter your full name"
                   placeholderTextColor="#9CA3AF"
                   value={name}
                   onChangeText={validateName}
+                  returnKeyType="next"
+                  onSubmitEditing={() => emailRef.current?.focus()}
                   autoCapitalize="words"
                   autoCorrect={false}
                   editable={!isLoading}
+                  blurOnSubmit={false}
                 />
               </View>
               {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
@@ -215,15 +224,19 @@ export default function Register() {
               <View style={[styles.inputContainer, emailError ? styles.inputError : null]}>
                 <Text style={styles.inputIcon}>✉️</Text>
                 <TextInput
+                  ref={emailRef}
                   style={styles.input}
                   placeholder="Enter your email"
                   placeholderTextColor="#9CA3AF"
                   value={email}
                   onChangeText={validateEmail}
                   keyboardType="email-address"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!isLoading}
+                  blurOnSubmit={false}
                 />
               </View>
               {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
@@ -235,15 +248,19 @@ export default function Register() {
               <View style={[styles.inputContainer, passwordError ? styles.inputError : null]}>
                 <Text style={styles.inputIcon}>🔒</Text>
                 <TextInput
+                  ref={passwordRef}
                   style={[styles.input, styles.passwordInput]}
                   placeholder="Create a password"
                   placeholderTextColor="#9CA3AF"
                   value={password}
                   onChangeText={validatePassword}
+                  returnKeyType="next"
+                  onSubmitEditing={() => confirmPasswordRef.current?.focus()}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!isLoading}
+                  blurOnSubmit={false}
                 />
                 <Pressable 
                   style={styles.eyeButton}
@@ -263,15 +280,19 @@ export default function Register() {
               <View style={[styles.inputContainer, confirmPasswordError ? styles.inputError : null]}>
                 <Text style={styles.inputIcon}>🔐</Text>
                 <TextInput
+                  ref={confirmPasswordRef}
                   style={[styles.input, styles.passwordInput]}
                   placeholder="Confirm your password"
                   placeholderTextColor="#9CA3AF"
                   value={confirmPassword}
                   onChangeText={validateConfirmPassword}
+                  returnKeyType="done"
+                  onSubmitEditing={handleRegister}
                   secureTextEntry={!showConfirmPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!isLoading}
+                  blurOnSubmit={false}
                 />
                 <Pressable 
                   style={styles.eyeButton}
