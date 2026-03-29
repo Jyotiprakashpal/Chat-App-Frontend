@@ -503,6 +503,9 @@ export default function Home() {
             placeholderTextColor="#94A3B8"
             value={message}
             onChangeText={setMessage}
+            onSubmitEditing={handleSendMessage}
+            returnKeyType="send"
+            blurOnSubmit={false}
           />
           <TouchableOpacity
             style={[styles.mobileSendButton, sendingMessage && styles.sendButtonDisabled]}
@@ -648,6 +651,9 @@ return (
                     placeholderTextColor="#94A3B8"
                     value={message}
                     onChangeText={setMessage}
+                    onSubmitEditing={handleSendMessage}
+                    returnKeyType="send"
+                    blurOnSubmit={false}
                   />
                   <TouchableOpacity
                     style={[styles.sendButton, sendingMessage && styles.sendButtonDisabled]}
