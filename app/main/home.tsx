@@ -190,20 +190,30 @@ export default function Home() {
     }
   }, [message, selectedUser, fetchConversations]);
 
+
+
   const getOtherParticipant = useCallback((conversation: Conversation): User | undefined => {
+    console.log("🔍 getOtherParticipant - conversation:", conversation);
+    
+    // For self-chats or single participant convos - return first participant
+    if (conversation.participants && Array.isArray(conversation.participants) && conversation.participants.length > 0) {
+      const fallback = conversation.participants[0];
+      console.log("✅ Using first participant (self-chat):", fallback);
+      return fallback;
+    }
+    
     // First, try to get from partner field (API response format)
     if (conversation.partner) {
-      // Make sure it's not the current user
       if (conversation.partner._id !== authUser?._id && conversation.partner.email !== authUser?.email) {
+        console.log("✅ Found partner:", conversation.partner);
+        return conversation.partner;
+      } else {
+        console.log("✅ Partner is self - using:", conversation.partner);
         return conversation.partner;
       }
     }
 
-    // Fallback to participants array if available
-    if (conversation.participants && Array.isArray(conversation.participants)) {
-      return conversation.participants.find((p) => p._id !== authUser?._id && p.email !== authUser?.email);
-    }
-
+    console.log("❌ No participant found for conversation:", conversation._id);
     return undefined;
   }, [authUser?._id, authUser?.email]);
 
@@ -238,7 +248,7 @@ export default function Home() {
 
     const filtered = conversations.filter((conv) => {
       const otherParticipant = getOtherParticipant(conv);
-      const name = (otherParticipant?.name || otherParticipant?.username || "").toLowerCase();
+      const name = (otherParticipant?.name || otherParticipant?.username || otherParticipant?.email || "").toLowerCase();
       const email = otherParticipant?.email?.toLowerCase() || "";
       const searchLower = search.toLowerCase();
 
@@ -258,48 +268,44 @@ export default function Home() {
       <TouchableOpacity
         style={styles.chatItem}
         onPress={async () => {
-          if (otherUser) {
-            console.log('🔥 CLICKED CHAT - START DEBUG');
-            console.log('otherUser:', otherUser);
-            console.log('Before API call:', `${ENDPOINTS.CHAT.MESSAGES}/${otherUser.email}`);
-            const token = await AsyncStorage.getItem("token");
-            console.log('Token:', token ? 'Present' : 'Missing');
-            const responseData = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${otherUser.email}`, undefined, token ?? undefined);
-            console.log('✅ API response data:', responseData);
-            console.log('responseData type:', typeof responseData, 'Array?', Array.isArray(responseData));
-            
-            // ✅ FIX: Update chatMessages state to show messages in UI
-            setChatMessages(responseData);
-            console.log('✅ setChatMessages called with', responseData.length, 'messages');
-            
-// Print all message contents - responseData is directly the array
-            console.log('📱 PRINTING MESSAGE CONTENTS:');
-            console.log('=== ALL MESSAGES ===');
-            if (Array.isArray(responseData)) {
-              responseData.forEach((msg: any, index: number) => {
-                console.log(`📨 Message ${index + 1}:`);
-                console.log(`   CONTENT: "${msg.content || 'NO CONTENT'}"`);
-                console.log(`   Sender: ${msg.sender}`);
-                console.log(`   Recipient: ${msg.recipient}`);
-                console.log(`   Created: ${msg.createdAt}`);
-                console.log('---');
-              });
-            } else {
-              console.log('❌ responseData is NOT array:', responseData);
-            }
-            console.log('Total messages:', Array.isArray(responseData) ? responseData.length : 0);
-            
-            console.log('After API call for', otherUser.email);
-            
+          console.log('🔥 CLICKED CHAT:', item._id);
+          const recipientEmail = otherUser?.email || (item.participants && item.participants[0]?.email) || item.partner?.email || '';
+          console.log('📧 Using recipientEmail:', recipientEmail);
+          
+          if (recipientEmail) {
+            try {
+              console.log('Before API call:', `${ENDPOINTS.CHAT.MESSAGES}/${recipientEmail}`);
+              const token = await AsyncStorage.getItem("token");
+              console.log('Token:', token ? 'Present' : 'Missing');
+              const responseData = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${recipientEmail}`, undefined, token ?? undefined);
+              console.log('✅ API response data:', responseData);
+              console.log('responseData type:', typeof responseData, 'Array?', Array.isArray(responseData));
+              
+              setChatMessages(responseData || []);
+              console.log('✅ setChatMessages called with', (responseData || []).length, 'messages');
+              
+              if (Array.isArray(responseData)) {
+                console.log('📱 MESSAGES:', responseData.map((msg, i) => ({
+                  i, content: msg.content, sender: msg.sender, recipient: msg.recipient
+                })));
+              }
+              
+            const displayName = otherUser?.name || otherUser?.username || "Chat";
             const userData = {
-              id: otherUser._id || otherUser.email,
-              name: otherUser.name || otherUser.username || "Unknown",
-              email: otherUser.email
+              id: otherUser?._id || recipientEmail,
+              name: displayName,
+              email: recipientEmail
             };
             setSelectedUser(userData);
-            if (!isTabletOrWeb) {
-              setMobileChatVisible(true);
+              if (!isTabletOrWeb) {
+                setMobileChatVisible(true);
+              }
+            } catch (error) {
+              console.error('❌ Message fetch error:', error);
+              Alert.alert('Error', 'Failed to load messages');
             }
+          } else {
+            console.error('❌ No recipient email found');
           }
         }}
         activeOpacity={0.7}
@@ -315,7 +321,7 @@ export default function Home() {
         <View style={styles.chatInfo}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>
-              {otherUser?.name || otherUser?.username || "Unknown User"}
+              {otherUser?.username?.includes("(You)") ? "(You)" : (otherUser?.name || otherUser?.username || "Chat")}
             </Text>
             <Text style={styles.time} numberOfLines={1}>
               {item.lastMessage
