@@ -179,7 +179,7 @@ export default function Home() {
         read: false,
         updatedAt: new Date().toISOString(),
       };
-      setChatMessages(prev => [...prev, newMessage]);
+      setChatMessages(prev => [newMessage, ...prev]);
       
       // Refresh conversations list
       fetchConversations(true);
@@ -281,7 +281,7 @@ export default function Home() {
               console.log('✅ API response data:', responseData);
               console.log('responseData type:', typeof responseData, 'Array?', Array.isArray(responseData));
               
-              setChatMessages(responseData || []);
+              setChatMessages((responseData || []).reverse());
               console.log('✅ setChatMessages called with', (responseData || []).length, 'messages');
               
               if (Array.isArray(responseData)) {
@@ -473,7 +473,7 @@ export default function Home() {
               data={chatMessages}
               keyExtractor={(item) => item._id}
               renderItem={({ item }) => {
-                      const isMyMessage = item.sender === authUser?._id;
+                const isMyMessage = item.sender === authUser?._id;
                 return (
                   <View
                     style={[
@@ -492,6 +492,7 @@ export default function Home() {
               }}
               contentContainerStyle={styles.messagesList}
               showsVerticalScrollIndicator={false}
+              inverted
             />
           )}
         </View>
@@ -641,6 +642,7 @@ return (
                       }}
                       contentContainerStyle={styles.chatMessagesList}
                       showsVerticalScrollIndicator={false}
+                      inverted
                     />
                   )}
                 </View>
@@ -891,15 +893,15 @@ const styles = StyleSheet.create({
 
   // Message styles for chat preview and mobile chat
   chatMessagesContainer: {
+    paddingHorizontal: 12,
     flex: 1,
-    padding: 16,
   },
   chatMessagesList: {
-    paddingBottom: 100,
+    paddingBottom: 80,
   },
   chatMessageContainer: {
     maxWidth: '75%',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   chatMyMessage: {
     alignSelf: 'flex-end',
@@ -910,16 +912,18 @@ const styles = StyleSheet.create({
   chatMyMessageText: {
     backgroundColor: '#4F46E5',
     color: '#fff',
-    padding: 10,
-    borderRadius: 14,
-    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    marginBottom: 2,
   },
   chatOtherMessageText: {
     backgroundColor: '#E5E7EB',
     color: '#1E293B',
-    padding: 10,
-    borderRadius: 14,
-    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    marginBottom: 2,
   },
   chatMessageTime: {
     fontSize: 10,
@@ -932,13 +936,13 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   messagesList: {
-    paddingBottom: 100,
+    paddingBottom: 80,
   },
   messageContainer: {
-    flex: 1,
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     maxWidth: "75%",
-    marginBottom: 10,
+    marginBottom: 6,
   },
   myMessage: {
     alignSelf: "flex-end",
@@ -949,16 +953,18 @@ const styles = StyleSheet.create({
   myMessageText: {
     backgroundColor: "#4F46E5",
     color: "#fff",
-    padding: 10,
-    borderRadius: 14,
-    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    marginBottom: 2,
   },
   otherMessageText: {
     backgroundColor: "#E5E7EB",
     color: "#1E293B",
-    padding: 10,
-    borderRadius: 14,
-    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    marginBottom: 2,
   },
   messageTime: {
     fontSize: 10,
@@ -1252,8 +1258,6 @@ const styles = StyleSheet.create({
   },
   mobileMessagesContainer: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
   },
   mobileChatInputContainer: {
     flexDirection: 'row',
