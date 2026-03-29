@@ -217,6 +217,24 @@ export default function Home() {
     return undefined;
   }, [authUser?._id, authUser?.email]);
 
+  const getDateHeader = useCallback((dateString: string): string => {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "";
+
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return "Today";
+    } else if (diffDays === 1) {
+      return "Yesterday";
+    } else if (diffDays < 7) {
+      return date.toLocaleDateString([], { weekday: 'long' });
+    } else {
+      return date.toLocaleDateString([], { month: 'long', day: 'numeric' });
+    }
+  }, []);
+
   const formatTime = useCallback((dateString: string): string => {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return "Just now";
@@ -471,22 +489,34 @@ export default function Home() {
           ) : (
             <FlatList
               data={chatMessages}
-              keyExtractor={(item) => item._id}
-              renderItem={({ item }) => {
+              keyExtractor={(item, index) => `${item._id}-${index}`}
+              renderItem={({ item, index }) => {
                 const isMyMessage = item.sender === authUser?._id;
+                const showDateHeader = index === chatMessages.length - 1 || 
+                  getDateHeader(chatMessages[index].createdAt) !== getDateHeader(chatMessages[index + 1]?.createdAt || '');
+                
                 return (
-                  <View
-                    style={[
-                      styles.messageContainer,
-                      isMyMessage ? styles.myMessage : styles.otherMessage,
-                    ]}
-                  >
-                    <Text style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
-                      {item.content}
-                    </Text>
-                    <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
-                      {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
+                  <View>
+                    {showDateHeader && (
+                      <View style={styles.dateHeaderContainer}>
+                        <Text style={styles.dateHeaderText}>
+                          {getDateHeader(chatMessages[index].createdAt)}
+                        </Text>
+                      </View>
+                    )}
+                    <View
+                      style={[
+                        styles.messageContainer,
+                        isMyMessage ? styles.myMessage : styles.otherMessage,
+                      ]}
+                    >
+                      <Text style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
+                        {item.content}
+                      </Text>
+                      <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
+                        {formatTime(item.createdAt)}
+                      </Text>
+                    </View>
                   </View>
                 );
               }}
@@ -621,22 +651,34 @@ return (
                   ) : (
                     <FlatList
                       data={chatMessages}
-                      keyExtractor={(item) => item._id}
-                      renderItem={({ item }) => {
+                      keyExtractor={(item, index) => `${item._id}-${index}`}
+                      renderItem={({ item, index }) => {
                         const isMyMessage = item.sender === authUser?._id;
+                        const showDateHeader = index === chatMessages.length - 1 || 
+                          getDateHeader(chatMessages[index].createdAt) !== getDateHeader(chatMessages[index + 1]?.createdAt || '');
+                        
                         return (
-                          <View
-                            style={[
-                              styles.chatMessageContainer,
-                              isMyMessage ? styles.chatMyMessage : styles.chatOtherMessage,
-                            ]}
-                          >
-                            <Text style={isMyMessage ? styles.chatMyMessageText : styles.chatOtherMessageText}>
-                              {item.content}
-                            </Text>
-                            <Text style={isMyMessage ? styles.chatMessageTime : styles.chatOtherMessageTime}>
-                              {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </Text>
+                          <View>
+                            {showDateHeader && (
+                              <View style={styles.dateHeaderContainer}>
+                                <Text style={styles.dateHeaderText}>
+                                  {getDateHeader(chatMessages[index].createdAt)}
+                                </Text>
+                              </View>
+                            )}
+                            <View
+                              style={[
+                                styles.chatMessageContainer,
+                                isMyMessage ? styles.chatMyMessage : styles.chatOtherMessage,
+                              ]}
+                            >
+                              <Text style={isMyMessage ? styles.chatMyMessageText : styles.chatOtherMessageText}>
+                                {item.content}
+                              </Text>
+                              <Text style={isMyMessage ? styles.chatMessageTime : styles.chatOtherMessageTime}>
+                                {formatTime(item.createdAt)}
+                              </Text>
+                            </View>
                           </View>
                         );
                       }}
@@ -1286,5 +1328,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#4F46E5',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  dateHeaderContainer: {
+    alignItems: 'center',
+    marginVertical: 12,
+    marginHorizontal: 24,
+  },
+  dateHeaderText: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    color: '#64748B',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    fontSize: 12,
+    fontWeight: '600',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
 });
