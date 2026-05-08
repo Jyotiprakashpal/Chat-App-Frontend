@@ -1,3 +1,7 @@
+#TO build and deploy app
+eas build -p android --profile preview
+
+
 # Chat-App-Frontend strcture
 
 chat-app/
