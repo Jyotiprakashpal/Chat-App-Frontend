@@ -19,6 +19,7 @@ import { AuthContext } from "../context/Authcontext";
 import LogoutPopup from "../Popup/logout";
 import { ENDPOINTS } from "../services/api/endpoints";
 import API from "../services/api/method";
+import socket, { connectSocket, sendSocketMessageAsync } from "../services/socket";
 import { Message } from "../types/message";
 import AllUserModal from "./chat/Utility/alluser";
 
@@ -55,6 +56,27 @@ interface SelectedUser {
   email: string;
 }
 
+type SocketMessage = Message & {
+  senderUser?: User;
+  recipientUser?: User;
+};
+
+const getMessageUserId = (value: Message["sender"] | Message["recipient"]) => {
+  return typeof value === "string" ? value : value?._id;
+};
+
+const getMessageUserEmail = (value: Message["sender"] | Message["recipient"]) => {
+  return typeof value === "string" ? undefined : value?.email;
+};
+
+const getConversationKey = (conversation: Conversation) => {
+  return conversation.partnerId || conversation.partner?._id || conversation.participants?.[0]?._id || conversation._id;
+};
+
+const isPendingMessage = (message: Message) => {
+  return message.status === "pending" || message._id.startsWith("temp-");
+};
+
 export default function Home() {
   const router = useRouter();
   const { logout, user: authUser } = useContext(AuthContext);
@@ -81,7 +103,6 @@ export default function Home() {
   // ✅ Mobile menu state + Mobile chat modal state
   // ✅ Message input state
   const [message, setMessage] = useState("");
-  const [sendingMessage, setSendingMessage] = useState(false);
 
   // ✅ Fetch conversations using ENDPOINTS
   const fetchConversations = useCallback(async (isRefresh = false) => {
@@ -130,20 +151,54 @@ export default function Home() {
     try {
       const token = await AsyncStorage.getItem("token");
       const response = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${recipientEmail}`, undefined, token ?? undefined);
-      setChatMessages(response.data || []);
+      setChatMessages([...(response.data || response || [])].reverse());
     } catch (error) {
       console.error('Error fetching messages:', error);
       setChatMessages([]);
     }
   }, []);
 
+  const clearConversationUnread = useCallback((partnerId?: string, partnerEmail?: string) => {
+    setConversations(prev => prev.map(conv => {
+      const convPartnerId = conv.partnerId || conv.partner?._id || conv.participants?.[0]?._id;
+      const convPartnerEmail = conv.partner?.email || conv.participants?.[0]?.email;
+      if (convPartnerId === partnerId || convPartnerEmail === partnerEmail) {
+        return { ...conv, unreadCount: 0 };
+      }
+      return conv;
+    }));
+
+    setFilteredConversations(prev => prev.map(conv => {
+      const convPartnerId = conv.partnerId || conv.partner?._id || conv.participants?.[0]?._id;
+      const convPartnerEmail = conv.partner?.email || conv.participants?.[0]?.email;
+      if (convPartnerId === partnerId || convPartnerEmail === partnerEmail) {
+        return { ...conv, unreadCount: 0 };
+      }
+      return conv;
+    }));
+  }, []);
+
+  const markConversationAsRead = useCallback(async (partnerId?: string, partnerEmail?: string) => {
+    const identifier = partnerId || partnerEmail;
+    if (!identifier) return;
+
+    clearConversationUnread(partnerId, partnerEmail);
+
+    try {
+      await API.put(`${ENDPOINTS.CHAT.MARK_READ}/${encodeURIComponent(identifier)}`, {});
+    } catch (error) {
+      console.error('Error marking messages read:', error);
+    }
+  }, [clearConversationUnread]);
+
   const handleUserSelect = useCallback(async (user: SelectedUser) => {
     await fetchChatMessages(user.email);
     setSelectedUser(user);
+    markConversationAsRead(user.id, user.email);
     if (!isTabletOrWeb) {
       setMobileChatVisible(true);
     }
-  }, [isTabletOrWeb, fetchChatMessages]);
+  }, [isTabletOrWeb, fetchChatMessages, markConversationAsRead]);
 
   // ✅ Close mobile chat and go back to conversations
   const handleBackToConversations = useCallback(() => {
@@ -159,36 +214,50 @@ export default function Home() {
       return;
     }
 
+    const content = message.trim();
+    const recipient = selectedUser;
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMessage: Message = {
+      _id: tempId,
+      sender: authUser?._id || authUser?.email || "",
+      recipient: recipient.id || recipient.email,
+      content,
+      createdAt: new Date().toISOString(),
+      read: false,
+      status: "pending",
+      updatedAt: new Date().toISOString(),
+    };
+
+    setChatMessages(prev => [optimisticMessage, ...prev]);
+    setMessage("");
+
     try {
-      setSendingMessage(true);
-      await API.post(ENDPOINTS.CHAT.MESSAGES, {
-        recipient: selectedUser.email,
-        content: message.trim()
-      });
-
-      // Clear message after sending
-      setMessage("");
-
-      // Add new message to local chat state immediately
-      const newMessage: Message = {
-        _id: Date.now().toString(),
-        sender: authUser?._id || '',
-        recipient: selectedUser!.email,
-        content: message.trim(),
-        createdAt: new Date().toISOString(),
-        read: false,
-        updatedAt: new Date().toISOString(),
+      const saveWithApi = async () => {
+        const savedMessage = await API.post(ENDPOINTS.CHAT.MESSAGES, {
+          recipient: recipient.email,
+          content
+        });
+        setChatMessages(prev => prev.map(item => item._id === tempId ? { ...savedMessage, status: savedMessage.read ? "read" : "sent" } : item));
+        fetchConversations(true);
       };
-      setChatMessages(prev => [newMessage, ...prev]);
-      
-      // Refresh conversations list
+
+      if (!socket.connected) {
+        await saveWithApi();
+        return;
+      }
+
+      const response = await sendSocketMessageAsync(recipient.email, content);
+      if (!response.ok || !response.message) {
+        await saveWithApi();
+        return;
+      }
+
+      setChatMessages(prev => prev.map(item => item._id === tempId ? { ...response.message, status: response.message.read ? "read" : "sent" } : item));
       fetchConversations(true);
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to send message");
-    } finally {
-      setSendingMessage(false);
+      setChatMessages(prev => prev.map(item => item._id === tempId ? { ...item, status: "pending" } : item));
     }
-  }, [message, selectedUser, fetchConversations]);
+  }, [message, selectedUser, authUser?._id, authUser?.email, fetchConversations]);
 
 
 
@@ -262,6 +331,118 @@ export default function Home() {
   }, [fetchConversations]);
 
   useEffect(() => {
+    const setupSocket = async () => {
+      const token = await AsyncStorage.getItem("token");
+      if (token) {
+        connectSocket(token);
+      }
+    };
+
+    setupSocket();
+
+    const handleNewMessage = async (incomingMessage: SocketMessage) => {
+      const senderId = getMessageUserId(incomingMessage.sender);
+      const recipientId = getMessageUserId(incomingMessage.recipient);
+      const senderEmail = incomingMessage.senderUser?.email || getMessageUserEmail(incomingMessage.sender);
+      const recipientEmail = incomingMessage.recipientUser?.email || getMessageUserEmail(incomingMessage.recipient);
+      if (senderId === authUser?._id || senderEmail === authUser?.email) {
+        fetchConversations(true);
+        return;
+      }
+
+      const partnerId = senderId === authUser?._id
+        ? recipientId
+        : senderId;
+      const partnerEmail = senderId === authUser?._id
+        ? recipientEmail
+        : senderEmail;
+      const isCurrentChat = Boolean(
+        selectedUser &&
+        (
+          selectedUser.id === partnerId ||
+          selectedUser.id === senderId ||
+          selectedUser.id === recipientId ||
+          selectedUser.email === partnerEmail ||
+          selectedUser.email === senderEmail ||
+          selectedUser.email === recipientEmail
+        )
+      );
+
+      if (isCurrentChat) {
+        setChatMessages(prev => {
+          const alreadyExists = prev.some(item =>
+            item._id === incomingMessage._id ||
+            (
+              item._id.startsWith("temp-") &&
+              item.content === incomingMessage.content &&
+              getMessageUserId(item.sender) === senderId
+            )
+          );
+          if (alreadyExists) return prev;
+          return [incomingMessage, ...prev];
+        });
+        await markConversationAsRead(partnerId, partnerEmail);
+      }
+
+      fetchConversations(true);
+    };
+
+    socket.on("newMessage", handleNewMessage);
+    socket.on("receiveMessage", handleNewMessage);
+
+    const handleMessagesRead = (data: { readBy?: string }) => {
+      setChatMessages(prev => prev.map(item => {
+        const isMyMessage =
+          getMessageUserId(item.sender) === authUser?._id ||
+          getMessageUserEmail(item.sender) === authUser?.email;
+        const wasReadByRecipient =
+          getMessageUserId(item.recipient) === data.readBy ||
+          getMessageUserEmail(item.recipient) === data.readBy;
+
+        return isMyMessage && wasReadByRecipient ? { ...item, read: true, status: "read" } : item;
+      }));
+    };
+
+    socket.on("messagesRead", handleMessagesRead);
+
+    const retryPendingMessages = async () => {
+      if (!selectedUser) return;
+
+      const pendingMessages = chatMessages.filter(item => {
+        const isMyMessage =
+          getMessageUserId(item.sender) === authUser?._id ||
+          getMessageUserEmail(item.sender) === authUser?.email;
+        return isMyMessage && isPendingMessage(item);
+      });
+
+      for (const pendingMessage of pendingMessages) {
+        try {
+          const response = await sendSocketMessageAsync(selectedUser.email, pendingMessage.content);
+          if (response.ok && response.message) {
+            setChatMessages(prev => prev.map(item =>
+              item._id === pendingMessage._id
+                ? { ...response.message, status: response.message.read ? "read" : "sent" }
+                : item
+            ));
+            fetchConversations(true);
+          }
+        } catch {
+          // Keep pending until another reconnect.
+        }
+      }
+    };
+
+    socket.on("connect", retryPendingMessages);
+
+    return () => {
+      socket.off("newMessage", handleNewMessage);
+      socket.off("receiveMessage", handleNewMessage);
+      socket.off("messagesRead", handleMessagesRead);
+      socket.off("connect", retryPendingMessages);
+    };
+  }, [authUser?._id, authUser?.email, selectedUser, chatMessages, fetchConversations, markConversationAsRead]);
+
+  useEffect(() => {
     if (!conversations.length) return;
 
     const filtered = conversations.filter((conv) => {
@@ -276,11 +457,12 @@ export default function Home() {
   }, [search, conversations, getOtherParticipant]);
 
   const keyExtractor = useCallback((item: Conversation) => {
-    return item._id || item.partnerId || item.participants?.[0]?._id || `conv-${Math.random()}`;
+    return getConversationKey(item) || `conv-${Math.random()}`;
   }, []);
 
   const renderItem = useCallback(({ item }: { item: Conversation }) => {
     const otherUser = getOtherParticipant(item);
+    const unreadCount = item.unreadCount || 0;
 
     return (
       <TouchableOpacity
@@ -309,12 +491,13 @@ export default function Home() {
               }
               
             const displayName = otherUser?.name || otherUser?.username || "Chat";
-            const userData = {
-              id: otherUser?._id || recipientEmail,
-              name: displayName,
-              email: recipientEmail
-            };
-            setSelectedUser(userData);
+              const userData = {
+                id: otherUser?._id || recipientEmail,
+                name: displayName,
+                email: recipientEmail
+              };
+              setSelectedUser(userData);
+              markConversationAsRead(userData.id, userData.email);
               if (!isTabletOrWeb) {
                 setMobileChatVisible(true);
               }
@@ -341,11 +524,20 @@ export default function Home() {
             <Text style={styles.name} numberOfLines={1}>
               {otherUser?.username?.includes("(You)") ? "(You)" : (otherUser?.name || otherUser?.username || "Chat")}
             </Text>
-            <Text style={styles.time} numberOfLines={1}>
-              {item.lastMessage
-                ? formatTime(item.lastMessage.createdAt || item.updatedAt)
-                : formatTime(item.updatedAt)}
-            </Text>
+            <View style={styles.chatMeta}>
+              <Text style={[styles.time, unreadCount > 0 && styles.unreadTime]} numberOfLines={1}>
+                {item.lastMessage
+                  ? formatTime(item.lastMessage.createdAt || item.updatedAt)
+                  : formatTime(item.updatedAt)}
+              </Text>
+              {unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
           {item.lastMessage ? (
             <Text style={styles.lastMessage} numberOfLines={1}>
@@ -359,7 +551,7 @@ export default function Home() {
         <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
       </TouchableOpacity>
     );
-  }, [getOtherParticipant, formatTime, authUser?.email, isTabletOrWeb]);
+  }, [getOtherParticipant, formatTime, authUser?.email, isTabletOrWeb, markConversationAsRead]);
 
   if (loading && !refreshing) {
     return (
@@ -491,7 +683,9 @@ export default function Home() {
               data={chatMessages}
               keyExtractor={(item, index) => `${item._id}-${index}`}
               renderItem={({ item, index }) => {
-                const isMyMessage = item.sender === authUser?._id;
+                const isMyMessage =
+                  getMessageUserId(item.sender) === authUser?._id ||
+                  getMessageUserEmail(item.sender) === authUser?.email;
                 const showDateHeader = index === chatMessages.length - 1 || 
                   getDateHeader(chatMessages[index].createdAt) !== getDateHeader(chatMessages[index + 1]?.createdAt || '');
                 
@@ -513,9 +707,18 @@ export default function Home() {
                       <Text style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
                         {item.content}
                       </Text>
-                      <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
-                        {formatTime(item.createdAt)}
-                      </Text>
+                      <View style={[styles.messageFooter, isMyMessage ? styles.myMessageFooter : styles.otherMessageFooter]}>
+                        <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
+                          {formatTime(item.createdAt)}
+                        </Text>
+                        {isMyMessage && (
+                          <Ionicons
+                            name={isPendingMessage(item) ? "time-outline" : "checkmark-done"}
+                            size={14}
+                            color={item.read || item.status === "read" ? "#38BDF8" : isPendingMessage(item) ? "#64748B" : "#111827"}
+                          />
+                        )}
+                      </View>
                     </View>
                   </View>
                 );
@@ -539,9 +742,9 @@ export default function Home() {
             blurOnSubmit={false}
           />
           <TouchableOpacity
-            style={[styles.mobileSendButton, sendingMessage && styles.sendButtonDisabled]}
+            style={[styles.mobileSendButton, !message.trim() && styles.sendButtonDisabled]}
             onPress={handleSendMessage}
-            disabled={sendingMessage}
+            disabled={!message.trim()}
           >
             <Ionicons name="send" size={20} color="#fff" />
           </TouchableOpacity>
@@ -653,7 +856,9 @@ return (
                       data={chatMessages}
                       keyExtractor={(item, index) => `${item._id}-${index}`}
                       renderItem={({ item, index }) => {
-                        const isMyMessage = item.sender === authUser?._id;
+                        const isMyMessage =
+                          getMessageUserId(item.sender) === authUser?._id ||
+                          getMessageUserEmail(item.sender) === authUser?.email;
                         const showDateHeader = index === chatMessages.length - 1 || 
                           getDateHeader(chatMessages[index].createdAt) !== getDateHeader(chatMessages[index + 1]?.createdAt || '');
                         
@@ -675,9 +880,18 @@ return (
                               <Text style={isMyMessage ? styles.chatMyMessageText : styles.chatOtherMessageText}>
                                 {item.content}
                               </Text>
-                              <Text style={isMyMessage ? styles.chatMessageTime : styles.chatOtherMessageTime}>
-                                {formatTime(item.createdAt)}
-                              </Text>
+                              <View style={[styles.messageFooter, isMyMessage ? styles.myMessageFooter : styles.otherMessageFooter]}>
+                                <Text style={isMyMessage ? styles.chatMessageTime : styles.chatOtherMessageTime}>
+                                  {formatTime(item.createdAt)}
+                                </Text>
+                                {isMyMessage && (
+                                  <Ionicons
+                                    name={isPendingMessage(item) ? "time-outline" : "checkmark-done"}
+                                    size={14}
+                                    color={item.read || item.status === "read" ? "#38BDF8" : isPendingMessage(item) ? "#64748B" : "#111827"}
+                                  />
+                                )}
+                              </View>
                             </View>
                           </View>
                         );
@@ -700,9 +914,9 @@ return (
                     blurOnSubmit={false}
                   />
                   <TouchableOpacity
-                    style={[styles.sendButton, sendingMessage && styles.sendButtonDisabled]}
+                    style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
                     onPress={handleSendMessage}
-                    disabled={sendingMessage}
+                    disabled={!message.trim()}
                   >
                     <Ionicons name="send" size={20} color="#fff" />
                   </TouchableOpacity>
@@ -977,6 +1191,18 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     textAlign: 'left',
   },
+  messageFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
+  myMessageFooter: {
+    justifyContent: "flex-end",
+  },
+  otherMessageFooter: {
+    justifyContent: "flex-start",
+  },
   messagesList: {
     paddingBottom: 80,
   },
@@ -1120,6 +1346,30 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     fontWeight: "500",
     flexShrink: 1,
+  },
+  chatMeta: {
+    alignItems: "flex-end",
+    marginLeft: 8,
+    minWidth: 52,
+  },
+  unreadTime: {
+    color: "#22C55E",
+    fontWeight: "700",
+  },
+  unreadBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#22C55E",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+    marginTop: 6,
+  },
+  unreadBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
   },
   lastMessage: {
     fontSize: 14,

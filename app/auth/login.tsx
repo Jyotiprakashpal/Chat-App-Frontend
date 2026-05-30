@@ -1,5 +1,6 @@
+import Constants from "expo-constants";
 import { useRouter } from "expo-router";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,8 +17,11 @@ import {
   View
 } from "react-native";
 import { AuthContext } from "../context/Authcontext";
+import { ENDPOINTS } from "../services/api/endpoints";
+import API from "../services/api/method";
 
 const { width, height } = Dimensions.get("window");
+const appVersion = Constants.expoConfig?.version;
 
 export default function Index() {
   const [email, setEmail] = useState("");
@@ -27,9 +31,23 @@ export default function Index() {
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [serverError, setServerError] = useState("");
+  const [latestVersion, setLatestVersion] = useState("");
   
   const router = useRouter();
   const { login } = useContext(AuthContext);
+
+  useEffect(() => {
+    const loadLatestVersion = async () => {
+      try {
+        const versionInfo = await API.get(ENDPOINTS.APP.VERSION);
+        setLatestVersion(versionInfo.latestVersion || "");
+      } catch {
+        setLatestVersion("");
+      }
+    };
+
+    loadLatestVersion();
+  }, []);
 
 const validateEmail = (text: string) => {
     setEmail(text);
@@ -229,6 +247,10 @@ const validatePassword = (text: string) => {
               <Text style={styles.signUpText}>Sign Up</Text>
             </TouchableOpacity>
           </View>
+          <Text style={styles.versionText}>
+            Version {appVersion}
+            {latestVersion && latestVersion !== appVersion ? ` | Latest ${latestVersion}` : ""}
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -453,5 +475,11 @@ const styles = StyleSheet.create({
     fontSize: Math.min(15, width * 0.038),
     color: "#4F46E5",
     fontWeight: "700",
+  },
+  versionText: {
+    color: "#94A3B8",
+    fontSize: 12,
+    marginTop: 14,
+    textAlign: "center",
   },
 });

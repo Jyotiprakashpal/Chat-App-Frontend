@@ -15,25 +15,49 @@ import {
 import { AuthContext } from "../../context/Authcontext";
 import ENDPOINTS from "../../services/api/endpoints";
 import API from "../../services/api/method";
-import socket from "../../services/socket";
+import socket, { connectSocket, sendSocketMessageAsync } from "../../services/socket";
 import { Message } from "../../types/message";
+
+const getMessageUserId = (value: Message["sender"] | Message["recipient"]) => {
+  return typeof value === "string" ? value : value?._id;
+};
+
+const getMessageUserEmail = (value: Message["sender"] | Message["recipient"]) => {
+  return typeof value === "string" ? undefined : value?.email;
+};
+
+const isPendingMessage = (message: Message) => {
+  return message.status === "pending" || message._id.startsWith("temp-");
+};
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams(); // id = receiver email
+  const chatPartnerId = Array.isArray(id) ? id[0] : id;
   const { user } = useContext(AuthContext);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const flatListRef = useRef<FlatList>(null);
 
+  const markMessagesRead = async () => {
+    if (!chatPartnerId) return;
+
+    try {
+      await API.put(`${ENDPOINTS.CHAT.MARK_READ}/${encodeURIComponent(chatPartnerId)}`, {});
+    } catch (error) {
+      console.log("Mark read error:", error);
+    }
+  };
+
   // ✅ Fetch Messages
   const fetchMessages = async () => {
     try {
       console.log('Before fetchMessages for', id);
       const token = await AsyncStorage.getItem("token");
-      const res = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${id}`, undefined, token ?? undefined);
-      console.log('After fetchMessages for', id);
-      setMessages(res.data || []);
+      const res = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${chatPartnerId}`, undefined, token ?? undefined);
+      console.log('After fetchMessages for', chatPartnerId);
+      setMessages(res.data || res || []);
+      markMessagesRead();
     } catch (error) {
       console.log("Fetch error:", error);
       setMessages([]);
@@ -43,24 +67,101 @@ export default function ChatScreen() {
   useEffect(() => {
     fetchMessages();
 
-    socket.connect();
+    const setupSocket = async () => {
+      const token = await AsyncStorage.getItem("token");
+      if (token) {
+        connectSocket(token);
+      }
+    };
 
-    socket.emit("join", user?.email);
+    setupSocket();
 
-      socket.on("receiveMessage", (message: Message) => {
-        if (
-          message.sender === id ||
-          message.recipient === id
-        ) {
-          setMessages((prev) => [...prev, message]);
+      const handleNewMessage = (message: Message & { senderUser?: { email?: string }; recipientUser?: { email?: string } }) => {
+        const senderId = getMessageUserId(message.sender);
+        const senderEmail = getMessageUserEmail(message.sender) || message.senderUser?.email;
+        const recipientEmail = getMessageUserEmail(message.recipient) || message.recipientUser?.email;
+
+        if (senderId === user?._id || senderEmail === user?.email) {
+          return;
         }
-      });
+
+        const recipientId = getMessageUserId(message.recipient);
+        const isCurrentChat =
+          senderId === chatPartnerId ||
+          recipientId === chatPartnerId ||
+          senderEmail === chatPartnerId ||
+          recipientEmail === chatPartnerId ||
+          message.senderUser?.email === chatPartnerId ||
+          message.recipientUser?.email === chatPartnerId;
+
+        if (isCurrentChat) {
+          setMessages((prev) => {
+            const alreadyExists = prev.some((item) =>
+              item._id === message._id ||
+              (
+                item._id.startsWith("temp-") &&
+                item.content === message.content &&
+                getMessageUserId(item.sender) === senderId
+              )
+            );
+            if (alreadyExists) return prev;
+            return [...prev, message];
+          });
+          markMessagesRead();
+        }
+      };
+
+      socket.on("newMessage", handleNewMessage);
+      socket.on("receiveMessage", handleNewMessage);
+
+      const handleMessagesRead = (data: { readBy?: string }) => {
+        setMessages((prev) => prev.map((item) => {
+          const isMyMessage =
+            getMessageUserId(item.sender) === user?._id ||
+            getMessageUserEmail(item.sender) === user?.email;
+          const wasReadByRecipient =
+            getMessageUserId(item.recipient) === data.readBy ||
+            getMessageUserEmail(item.recipient) === data.readBy;
+
+          return isMyMessage && wasReadByRecipient ? { ...item, read: true, status: "read" } : item;
+        }));
+      };
+
+      socket.on("messagesRead", handleMessagesRead);
+
+      const retryPendingMessages = async () => {
+        const pendingMessages = messages.filter((item) => {
+          const isMyMessage =
+            getMessageUserId(item.sender) === user?._id ||
+            getMessageUserEmail(item.sender) === user?.email;
+          return isMyMessage && isPendingMessage(item);
+        });
+
+        for (const pendingMessage of pendingMessages) {
+          try {
+            const response = await sendSocketMessageAsync(chatPartnerId as string, pendingMessage.content);
+            if (response.ok && response.message) {
+              setMessages((prev) => prev.map((item) =>
+                item._id === pendingMessage._id
+                  ? { ...response.message, status: response.message.read ? "read" : "sent" }
+                  : item
+              ));
+            }
+          } catch {
+            // Keep pending until another reconnect.
+          }
+        }
+      };
+
+      socket.on("connect", retryPendingMessages);
 
     return () => {
-      socket.off("receiveMessage");
-      socket.disconnect();
+      socket.off("newMessage", handleNewMessage);
+      socket.off("receiveMessage", handleNewMessage);
+      socket.off("messagesRead", handleMessagesRead);
+      socket.off("connect", retryPendingMessages);
     };
-  }, [id, user?.email]);
+  }, [chatPartnerId, messages, user?._id, user?.email]);
 
   // ✅ Send Message
   const handleSend = async () => {
@@ -68,45 +169,59 @@ export default function ChatScreen() {
 
     // Format the message data as required by the MESSAGES endpoint
     const messageData = {
-      recipient: id as string,
+      recipient: chatPartnerId as string,
       content: text.trim(),
     };
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMessage: Message = {
+      _id: tempId,
+      sender: user._id || user.email,
+      recipient: chatPartnerId as string,
+      content: messageData.content,
+      createdAt: new Date().toISOString(),
+      read: false,
+      status: "pending",
+      updatedAt: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setText("");
+
     console.log("Sending message data:", messageData);
     try {
-      // Get the token from AsyncStorage and pass it explicitly
-      const token = await AsyncStorage.getItem("token");
-      
-      // Make the API call with explicit token passing (convert null to undefined)
-      await API.post(ENDPOINTS.CHAT.MESSAGES, messageData, token ?? undefined);
-
-      // Also emit via socket for real-time updates
-      socket.emit("sendMessage", {
-        senderEmail: user.email,
-        receiverEmail: id as string,
-        text: text.trim(),
-        createdAt: new Date().toISOString(),
-      });
-
-      // Add to local messages state for UI update
-      const newMessage: Message = {
-        _id: Date.now().toString(),
-        sender: user.email,
-        recipient: id as string,
-        content: text.trim(),
-        createdAt: new Date().toISOString(),
-        read: false,
-        updatedAt: new Date().toISOString(),
+      const saveWithApi = async () => {
+        const token = await AsyncStorage.getItem("token");
+        const savedMessage = await API.post(ENDPOINTS.CHAT.MESSAGES, messageData, token ?? undefined);
+        setMessages((prev) => prev.map((item) => item._id === tempId ? { ...savedMessage, status: savedMessage.read ? "read" : "sent" } : item));
       };
-      
-      setMessages((prev) => [...prev, newMessage]);
-      setText("");
+
+      if (!socket.connected) {
+        await saveWithApi();
+        return;
+      }
+
+      const response = await sendSocketMessageAsync(messageData.recipient, messageData.content);
+      if (!response.ok || !response.message) {
+        await saveWithApi();
+        return;
+      }
+
+      setMessages((prev) => {
+        if (prev.some((item) => item._id === response.message._id)) {
+          return prev.filter((item) => item._id !== tempId);
+        }
+        return prev.map((item) => item._id === tempId ? { ...response.message, status: response.message.read ? "read" : "sent" } : item);
+      });
     } catch (error) {
+      setMessages((prev) => prev.map((item) => item._id === tempId ? { ...item, status: "pending" } : item));
       console.log("Send error:", error);
     }
   };
 
   const renderItem = ({ item }: { item: Message }) => {
-    const isMyMessage = item.sender === user?.email;
+    const isMyMessage =
+      getMessageUserId(item.sender) === user?._id ||
+      getMessageUserEmail(item.sender) === user?.email;
 
     return (
       <View
@@ -118,9 +233,18 @@ export default function ChatScreen() {
         <Text style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
           {item.content}
         </Text>
-        <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
-          {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
+        <View style={[styles.messageFooter, isMyMessage ? styles.myMessageFooter : styles.otherMessageFooter]}>
+          <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
+            {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+          {isMyMessage && (
+            <Ionicons
+              name={isPendingMessage(item) ? "time-outline" : "checkmark-done"}
+              size={14}
+              color={item.read || item.status === "read" ? "#38BDF8" : isPendingMessage(item) ? "#64748B" : "#111827"}
+            />
+          )}
+        </View>
       </View>
     );
   };
@@ -132,7 +256,7 @@ export default function ChatScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{id}</Text>
+        <Text style={styles.headerTitle}>{chatPartnerId}</Text>
       </View>
 
       {/* Messages */}
@@ -213,13 +337,23 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.7)",
     fontSize: 10,
     alignSelf: "flex-end",
-    marginTop: 4,
   },
   otherMessageTime: {
     color: "#64748B",
     fontSize: 10,
     alignSelf: "flex-end",
+  },
+  messageFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     marginTop: 4,
+  },
+  myMessageFooter: {
+    justifyContent: "flex-end",
+  },
+  otherMessageFooter: {
+    justifyContent: "flex-start",
   },
   inputContainer: {
     flexDirection: "row",

@@ -1,56 +1,68 @@
-// Socket service stub - to be implemented with a React Native compatible library
-// socket.io-client has issues with Metro bundler
+import { io, Socket } from "socket.io-client";
+import { BASE_URL } from "./api/baseurl";
 
-// Stub socket object
-export const socket = {
-  connected: false,
-  auth: {},
-  
-  connect: () => {
-    console.log("Socket: connect called (stub)");
-  },
-  
-  disconnect: () => {
-    console.log("Socket: disconnect called (stub)");
-  },
-  
-  emit: (event: string, data: any) => {
-    console.log(`Socket: emit ${event}`, data);
-  },
-  
-  on: (event: string, callback: any) => {
-    console.log(`Socket: on ${event} (stub)`);
-  },
-  
-  off: (event: string) => {
-    console.log(`Socket: off ${event} (stub)`);
-  },
-};
+const SOCKET_URL = BASE_URL.replace(/\/api\/?$/, "");
+
+export const socket: Socket = io(SOCKET_URL, {
+  autoConnect: false,
+  transports: ["websocket", "polling"],
+});
 
 export const connectSocket = (token: string) => {
-  console.log("Socket: connectSocket called with token (stub)", token);
+  if (!token) return;
+
+  const currentToken = typeof socket.auth === "object" ? socket.auth?.token : undefined;
+
+  if (socket.connected && currentToken && currentToken !== token) {
+    socket.disconnect();
+  }
+
   socket.auth = { token };
-  socket.connect();
+
+  if (!socket.connected) {
+    socket.connect();
+  }
 };
 
 export const disconnectSocket = () => {
-  console.log("Socket: disconnectSocket called (stub)");
   socket.disconnect();
 };
 
-export const emitTyping = (receiverId: string) => {
-  console.log("Socket: emitTyping called (stub)", receiverId);
-  socket.emit("typing", { receiverId });
+export const emitTyping = (recipientId: string, conversationId?: string) => {
+  socket.emit("typing", { recipientId, conversationId });
 };
 
-export const emitStopTyping = (receiverId: string) => {
-  console.log("Socket: emitStopTyping called (stub)", receiverId);
-  socket.emit("stopTyping", { receiverId });
+export const emitStopTyping = (recipientId: string, conversationId?: string) => {
+  socket.emit("stopTyping", { recipientId, conversationId });
 };
 
-export const sendMessage = (receiverId: string, message: string) => {
-  console.log("Socket: sendMessage called (stub)", receiverId, message);
-  socket.emit("sendMessage", { receiverId, message });
+export const sendSocketMessage = (
+  recipient: string,
+  content: string,
+  callback?: (response: { ok: boolean; message?: any }) => void
+) => {
+  socket.emit("sendMessage", { recipient, content }, callback);
+};
+
+export const sendSocketMessageAsync = (
+  recipient: string,
+  content: string
+): Promise<{ ok: boolean; message?: any }> => {
+  return new Promise((resolve) => {
+    if (!socket.connected) {
+      resolve({ ok: false, message: "Socket is not connected" });
+      return;
+    }
+
+    socket.timeout(2500).emit("sendMessage", { recipient, content }, (error: Error | null, response: any) => {
+      if (error) {
+        resolve({ ok: false, message: error.message || "Socket message timeout" });
+        return;
+      }
+
+      resolve(response || { ok: false, message: "No socket response" });
+    });
+  });
 };
 
 export default socket;

@@ -10,6 +10,11 @@ export const ENDPOINTS = {
   CHAT: {
     GET_CONVERSATIONS: '/messages/conversations',
     MESSAGES: '/messages',  // (GET, POST)
+    MARK_READ: '/messages/read',
+  },
+  // App metadata endpoints
+  APP: {
+    VERSION: '/app/version',
   },
   // User endpoints
   USER: {
