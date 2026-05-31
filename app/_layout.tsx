@@ -4,7 +4,7 @@
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useContext, useEffect } from "react";
 import AuthProvider, { AuthContext } from "./context/Authcontext";
-import { checkForAppUpdate, requestNotificationPermission } from "./services/notifications";
+import { checkForAppUpdate, registerPushToken } from "./services/notifications";
 
 export default function RootLayout() {
   return (
@@ -34,7 +34,9 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!user) return;
 
-    requestNotificationPermission();
+    registerPushToken().catch((error) => {
+      console.log("Push token registration failed:", error);
+    });
     checkForAppUpdate().catch((error) => {
       console.log("App update check failed:", error);
     });

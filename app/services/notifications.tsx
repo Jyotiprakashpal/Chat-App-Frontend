@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
-import { Alert, Linking, Platform } from "react-native";
+import { Alert, AlertButton, Linking, Platform } from "react-native";
 import { ENDPOINTS } from "./api/endpoints";
 import API from "./api/method";
 
@@ -12,6 +12,7 @@ type AppVersionInfo = {
   updateMessage?: string;
   updateUrl?: string;
   forceUpdate?: boolean;
+  updatedAt?: string;
 };
 
 Notifications.setNotificationHandler({
@@ -41,6 +42,15 @@ const compareVersions = (current: string, latest: string) => {
 export const requestNotificationPermission = async () => {
   if (Platform.OS === "web") return false;
 
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("default", {
+      name: "default",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#4F46E5",
+    });
+  }
+
   const currentPermission = await Notifications.getPermissionsAsync();
   let finalStatus = currentPermission.status;
 
@@ -52,31 +62,69 @@ export const requestNotificationPermission = async () => {
   return finalStatus === "granted";
 };
 
+export const registerPushToken = async () => {
+  if (Platform.OS === "web") return;
+
+  const hasPermission = await requestNotificationPermission();
+  if (!hasPermission) return;
+
+  const projectId =
+    Constants.expoConfig?.extra?.eas?.projectId ||
+    Constants.easConfig?.projectId;
+
+  if (!projectId) {
+    console.log("Expo push token skipped: missing EAS projectId");
+    return;
+  }
+
+  const pushToken = await Notifications.getExpoPushTokenAsync({ projectId });
+  await API.post(ENDPOINTS.AUTH.PUSH_TOKEN, { token: pushToken.data });
+};
+
 export const showAppUpdateNotification = async (versionInfo: AppVersionInfo) => {
   const title = versionInfo.updateTitle || "JyoChat update available";
   const body = versionInfo.updateMessage || `Version ${versionInfo.latestVersion} is available.`;
+  const androidPackage = Constants.expoConfig?.android?.package;
+  const fallbackUpdateUrl = androidPackage
+    ? `https://play.google.com/store/apps/details?id=${androidPackage}`
+    : "";
+  const updateUrl = versionInfo.updateUrl || fallbackUpdateUrl;
+
+  const openUpdateUrl = async () => {
+    if (!updateUrl) {
+      Alert.alert("Update link missing", "Please configure updateUrl in the app version collection.");
+      return;
+    }
+
+    await Linking.openURL(updateUrl);
+  };
 
   if (Platform.OS !== "web" && await requestNotificationPermission()) {
     await Notifications.scheduleNotificationAsync({
       content: {
         title,
         body,
-        data: { updateUrl: versionInfo.updateUrl || "" },
+        data: { updateUrl },
       },
       trigger: null,
     });
   }
 
-  Alert.alert(title, body, [
-    ...(versionInfo.updateUrl ? [{
-      text: "Update",
-      onPress: () => Linking.openURL(versionInfo.updateUrl as string),
-    }] : []),
+  const buttons: AlertButton[] = [
     {
-      text: versionInfo.forceUpdate ? "OK" : "Later",
-      style: "cancel",
+      text: "Update",
+      onPress: openUpdateUrl,
     },
-  ]);
+  ];
+
+  if (!versionInfo.forceUpdate) {
+    buttons.push({
+      text: "Later",
+      style: "cancel",
+    });
+  }
+
+  Alert.alert(title, body, buttons);
 };
 
 export const checkForAppUpdate = async () => {
@@ -86,7 +134,7 @@ export const checkForAppUpdate = async () => {
 
   if (!updateAvailable) return;
 
-  const notificationKey = `app-update-notified-${versionInfo.latestVersion}`;
+  const notificationKey = `app-update-notified-${versionInfo.latestVersion}-${versionInfo.updatedAt || "no-date"}`;
   const alreadyNotified = await AsyncStorage.getItem(notificationKey);
 
   if (alreadyNotified && !versionInfo.forceUpdate) return;

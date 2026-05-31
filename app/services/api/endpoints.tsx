@@ -5,6 +5,7 @@ export const ENDPOINTS = {
     REGISTER: '/auth/register',
     LOGIN: '/auth/login',
     GET_CURRENT_USER: '/auth/me',
+    PUSH_TOKEN: '/auth/push-token',
   },
   // Chat endpoints
   CHAT: {
