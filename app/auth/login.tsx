@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -27,6 +29,8 @@ export default function Index() {
   const isWideLayout = width >= 900;
   const isNarrowLayout = width < 380;
   const horizontalPadding = width < 420 ? 18 : 32;
+  const backgroundDrift = useRef(new Animated.Value(0)).current;
+  const backgroundPulse = useRef(new Animated.Value(0)).current;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,6 +43,50 @@ export default function Index() {
 
   const router = useRouter();
   const { login } = useContext(AuthContext);
+
+  useEffect(() => {
+    const driftAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(backgroundDrift, {
+          toValue: 1,
+          duration: 9000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(backgroundDrift, {
+          toValue: 0,
+          duration: 9000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(backgroundPulse, {
+          toValue: 1,
+          duration: 4200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(backgroundPulse, {
+          toValue: 0,
+          duration: 4200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    driftAnimation.start();
+    pulseAnimation.start();
+
+    return () => {
+      driftAnimation.stop();
+      pulseAnimation.stop();
+    };
+  }, [backgroundDrift, backgroundPulse]);
 
   useEffect(() => {
     const loadLatestVersion = async () => {
@@ -120,8 +168,65 @@ export default function Index() {
     // Navigate to forgot password screen
   };
 
+  const primaryBandTranslate = backgroundDrift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-42, 34],
+  });
+  const secondaryBandTranslate = backgroundDrift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [38, -28],
+  });
+  const accentOpacity = backgroundPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.2, 0.36],
+  });
+
   return (
     <View style={[styles.container, !isWideLayout && styles.containerMobile]}>
+      <View style={styles.backgroundBase} pointerEvents="none">
+        <Animated.View
+          style={[
+            styles.backgroundBand,
+            styles.backgroundBandPrimary,
+            {
+              opacity: isWideLayout ? 0.32 : 0.5,
+              transform: [
+                { translateX: primaryBandTranslate },
+                { rotate: "-16deg" },
+              ],
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.backgroundBand,
+            styles.backgroundBandSecondary,
+            {
+              opacity: isWideLayout ? 0.28 : 0.42,
+              transform: [
+                { translateX: secondaryBandTranslate },
+                { rotate: "18deg" },
+              ],
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.backgroundGlow,
+            {
+              opacity: accentOpacity,
+              transform: [
+                {
+                  scale: backgroundPulse.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.96, 1.08],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+      </View>
       <StatusBar
         barStyle={isWideLayout ? "light-content" : "dark-content"}
         backgroundColor={isWideLayout ? "#0F172A" : "#F8FAFC"}
@@ -133,9 +238,10 @@ export default function Index() {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
+            !isWideLayout && styles.scrollContentMobile,
             {
               paddingHorizontal: horizontalPadding,
-              paddingTop: Platform.OS === "ios" ? 56 : 36,
+              paddingTop: isWideLayout ? (Platform.OS === "ios" ? 56 : 36) : 22,
             },
           ]}
           keyboardShouldPersistTaps="handled"
@@ -150,7 +256,6 @@ export default function Index() {
                   </View>
                   <View>
                     <Text style={styles.appName}>ChatApp</Text>
-                    <Text style={styles.appTagline}>Fast. Private. Connected.</Text>
                   </View>
                 </View>
 
@@ -197,19 +302,18 @@ export default function Index() {
                     <Ionicons name="chatbubble-ellipses" size={30} color="#FFFFFF" />
                   </View>
                   <Text style={styles.mobileAppName}>ChatApp</Text>
-                  <Text style={styles.mobileTagline}>Fast. Private. Connected.</Text>
                 </View>
               ) : null}
 
-              <View style={[styles.formHeader, !isWideLayout && styles.formHeaderMobile]}>
-                <Text style={styles.formEyebrow}>Secure login</Text>
-                <Text style={[styles.formTitle, !isWideLayout && styles.formTitleMobile]}>
-                  Sign in to your account
-                </Text>
-                <Text style={styles.formSubtitle}>
-                  Use your email and password to continue.
-                </Text>
-              </View>
+              {isWideLayout ? (
+                <View style={styles.formHeader}>
+                  <Text style={styles.formEyebrow}>Welcome back</Text>
+                  <Text style={styles.formTitle}>Sign in to your account</Text>
+                  <Text style={styles.formSubtitle}>
+                    Use your email and password to continue.
+                  </Text>
+                </View>
+              ) : null}
 
               <View style={styles.inputWrapper}>
                 <Text style={styles.inputLabel}>Email</Text>
@@ -348,9 +452,39 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0F172A",
+    overflow: "hidden",
   },
   containerMobile: {
     backgroundColor: "#F8FAFC",
+  },
+  backgroundBase: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#F8FAFC",
+  },
+  backgroundBand: {
+    position: "absolute",
+    width: "130%",
+    height: 190,
+    borderRadius: 42,
+  },
+  backgroundBandPrimary: {
+    top: 44,
+    left: "-16%",
+    backgroundColor: "#CFFAFE",
+  },
+  backgroundBandSecondary: {
+    bottom: 78,
+    right: "-18%",
+    backgroundColor: "#FED7AA",
+  },
+  backgroundGlow: {
+    position: "absolute",
+    top: "26%",
+    right: "-18%",
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: "#A7F3D0",
   },
   keyboardView: {
     flex: 1,
@@ -359,6 +493,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: "center",
     paddingBottom: 36,
+  },
+  scrollContentMobile: {
+    justifyContent: "flex-start",
+    paddingBottom: 24,
   },
   shell: {
     width: "100%",
@@ -514,11 +652,14 @@ const styles = StyleSheet.create({
   },
   formCardMobile: {
     flex: 0,
-    borderRadius: 30,
-    paddingHorizontal: 22,
-    paddingVertical: 26,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    backgroundColor: "transparent",
+    borderRadius: 0,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    borderWidth: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   formCardWide: {
     borderTopRightRadius: 30,
@@ -529,25 +670,25 @@ const styles = StyleSheet.create({
   },
   mobileBrand: {
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 20,
   },
   mobileLogoCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 22,
+    width: 62,
+    height: 62,
+    borderRadius: 20,
     backgroundColor: "#14B8A6",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: 10,
     shadowColor: "#14B8A6",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.24,
-    shadowRadius: 18,
-    elevation: 7,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 5,
   },
   mobileAppName: {
     color: "#0F172A",
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: "900",
   },
   mobileTagline: {
@@ -562,6 +703,7 @@ const styles = StyleSheet.create({
   },
   formHeaderMobile: {
     alignItems: "center",
+    marginBottom: 22,
   },
   formEyebrow: {
     color: "#F97316",
@@ -578,14 +720,19 @@ const styles = StyleSheet.create({
   },
   formTitleMobile: {
     textAlign: "center",
-    fontSize: 27,
-    lineHeight: 33,
+    fontSize: 26,
+    lineHeight: 32,
   },
   formSubtitle: {
     color: "#64748B",
     fontSize: 15,
     lineHeight: 22,
     marginTop: 8,
+  },
+  formSubtitleMobile: {
+    textAlign: "center",
+    fontSize: 14,
+    lineHeight: 20,
   },
   inputWrapper: {
     marginBottom: 18,
