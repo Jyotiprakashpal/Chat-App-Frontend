@@ -25,6 +25,7 @@ const appVersion = Constants.expoConfig?.version;
 export default function Index() {
   const { width } = useWindowDimensions();
   const isWideLayout = width >= 900;
+  const isNarrowLayout = width < 380;
   const horizontalPadding = width < 420 ? 18 : 32;
 
   const [email, setEmail] = useState("");
@@ -120,8 +121,11 @@ export default function Index() {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
+    <View style={[styles.container, !isWideLayout && styles.containerMobile]}>
+      <StatusBar
+        barStyle={isWideLayout ? "light-content" : "dark-content"}
+        backgroundColor={isWideLayout ? "#0F172A" : "#F8FAFC"}
+      />
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -138,56 +142,70 @@ export default function Index() {
           showsVerticalScrollIndicator={false}
         >
           <View style={[styles.shell, isWideLayout && styles.shellWide]}>
+            {isWideLayout ? (
+              <View style={[styles.heroPanel, styles.heroPanelWide]}>
+                <View style={styles.logoRow}>
+                  <View style={styles.logoCircle}>
+                    <Ionicons name="chatbubble-ellipses" size={32} color="#FFFFFF" />
+                  </View>
+                  <View>
+                    <Text style={styles.appName}>ChatApp</Text>
+                    <Text style={styles.appTagline}>Fast. Private. Connected.</Text>
+                  </View>
+                </View>
+
+                <View style={styles.heroCopy}>
+                  <Text style={styles.heroTitle}>Welcome back!</Text>
+                  <Text style={styles.heroSubtitle}>
+                    Sign in and jump right into your conversations.
+                  </Text>
+                </View>
+
+                <View style={styles.previewCard}>
+                  <View style={styles.previewHeader}>
+                    <View style={styles.previewAvatar}>
+                      <Ionicons name="sparkles" size={18} color="#0F172A" />
+                    </View>
+                    <View style={styles.previewTextBlock}>
+                      <Text style={styles.previewName}>{"Today's chats"}</Text>
+                      <Text style={styles.previewStatus}>3 new messages waiting</Text>
+                    </View>
+                  </View>
+                  <View style={styles.messageBubblePrimary}>
+                    <Text style={styles.messageBubbleTextPrimary}>
+                      Are you available now?
+                    </Text>
+                  </View>
+                  <View style={styles.messageBubbleSecondary}>
+                    <Text style={styles.messageBubbleTextSecondary}>
+                      Yes, joining in a minute.
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
+
             <View
               style={[
-                styles.heroPanel,
-                isWideLayout ? styles.heroPanelWide : styles.heroPanelMobile,
+                styles.formCard,
+                isWideLayout ? styles.formCardWide : styles.formCardMobile,
               ]}
             >
-              <View style={styles.logoRow}>
-                <View style={styles.logoCircle}>
-                  <Ionicons name="chatbubble-ellipses" size={32} color="#FFFFFF" />
-                </View>
-                <View>
-                  <Text style={styles.appName}>ChatApp</Text>
-                  <Text style={styles.appTagline}>Fast. Private. Connected.</Text>
-                </View>
-              </View>
-
-              <View style={styles.heroCopy}>
-                <Text style={styles.heroTitle}>Welcome back!</Text>
-                <Text style={styles.heroSubtitle}>
-                  Sign in and jump right into your conversations.
-                </Text>
-              </View>
-
-              <View style={styles.previewCard}>
-                <View style={styles.previewHeader}>
-                  <View style={styles.previewAvatar}>
-                    <Ionicons name="sparkles" size={18} color="#0F172A" />
+              {!isWideLayout ? (
+                <View style={styles.mobileBrand}>
+                  <View style={styles.mobileLogoCircle}>
+                    <Ionicons name="chatbubble-ellipses" size={30} color="#FFFFFF" />
                   </View>
-                  <View style={styles.previewTextBlock}>
-                    <Text style={styles.previewName}>{"Today's chats"}</Text>
-                    <Text style={styles.previewStatus}>3 new messages waiting</Text>
-                  </View>
+                  <Text style={styles.mobileAppName}>ChatApp</Text>
+                  <Text style={styles.mobileTagline}>Fast. Private. Connected.</Text>
                 </View>
-                <View style={styles.messageBubblePrimary}>
-                  <Text style={styles.messageBubbleTextPrimary}>
-                    Are you available now?
-                  </Text>
-                </View>
-                <View style={styles.messageBubbleSecondary}>
-                  <Text style={styles.messageBubbleTextSecondary}>
-                    Yes, joining in a minute.
-                  </Text>
-                </View>
-              </View>
-            </View>
+              ) : null}
 
-            <View style={[styles.formCard, isWideLayout && styles.formCardWide]}>
-              <View style={styles.formHeader}>
+              <View style={[styles.formHeader, !isWideLayout && styles.formHeaderMobile]}>
                 <Text style={styles.formEyebrow}>Secure login</Text>
-                <Text style={styles.formTitle}>Sign in to your account</Text>
+                <Text style={[styles.formTitle, !isWideLayout && styles.formTitleMobile]}>
+                  Sign in to your account
+                </Text>
                 <Text style={styles.formSubtitle}>
                   Use your email and password to continue.
                 </Text>
@@ -288,7 +306,12 @@ export default function Index() {
                 <View style={styles.dividerLine} />
               </View>
 
-              <View style={styles.socialButtonsContainer}>
+              <View
+                style={[
+                  styles.socialButtonsContainer,
+                  isNarrowLayout && styles.socialButtonsContainerNarrow,
+                ]}
+              >
                 <TouchableOpacity style={styles.socialButton} disabled={isLoading}>
                   <Ionicons name="logo-google" size={20} color="#EA4335" />
                   <Text style={styles.socialButtonText}>Google</Text>
@@ -325,6 +348,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0F172A",
+  },
+  containerMobile: {
+    backgroundColor: "#F8FAFC",
   },
   keyboardView: {
     flex: 1,
@@ -486,6 +512,14 @@ const styles = StyleSheet.create({
     shadowRadius: 32,
     elevation: 10,
   },
+  formCardMobile: {
+    flex: 0,
+    borderRadius: 30,
+    paddingHorizontal: 22,
+    paddingVertical: 26,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
   formCardWide: {
     borderTopRightRadius: 30,
     borderBottomRightRadius: 30,
@@ -493,8 +527,41 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     maxWidth: 500,
   },
+  mobileBrand: {
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  mobileLogoCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    backgroundColor: "#14B8A6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+    shadowColor: "#14B8A6",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    elevation: 7,
+  },
+  mobileAppName: {
+    color: "#0F172A",
+    fontSize: 30,
+    fontWeight: "900",
+  },
+  mobileTagline: {
+    color: "#64748B",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 3,
+  },
   formHeader: {
     marginBottom: 26,
+    alignItems: "flex-start",
+  },
+  formHeaderMobile: {
+    alignItems: "center",
   },
   formEyebrow: {
     color: "#F97316",
@@ -508,6 +575,11 @@ const styles = StyleSheet.create({
     lineHeight: 36,
     fontWeight: "900",
     marginTop: 8,
+  },
+  formTitleMobile: {
+    textAlign: "center",
+    fontSize: 27,
+    lineHeight: 33,
   },
   formSubtitle: {
     color: "#64748B",
@@ -622,6 +694,9 @@ const styles = StyleSheet.create({
   socialButtonsContainer: {
     flexDirection: "row",
     gap: 12,
+  },
+  socialButtonsContainerNarrow: {
+    flexDirection: "column",
   },
   socialButton: {
     flex: 1,
