@@ -154,8 +154,8 @@ export default function Index() {
       setIsLoading(false);
       setServerError(
         error.response?.data?.message ||
-          error.message ||
-          "An error occurred during login. Please try again."
+        error.message ||
+        "An error occurred during login. Please try again."
       );
     }
   };
@@ -255,7 +255,7 @@ export default function Index() {
                     <Ionicons name="chatbubble-ellipses" size={32} color="#FFFFFF" />
                   </View>
                   <View>
-                    <Text style={styles.appName}>ChatApp</Text>
+                    <Text style={styles.appName}>JyoChat</Text>
                   </View>
                 </View>
 
@@ -301,7 +301,7 @@ export default function Index() {
                   <View style={styles.mobileLogoCircle}>
                     <Ionicons name="chatbubble-ellipses" size={30} color="#FFFFFF" />
                   </View>
-                  <Text style={styles.mobileAppName}>ChatApp</Text>
+                  <Text style={styles.mobileAppName}>JyoChat</Text>
                 </View>
               ) : null}
 
