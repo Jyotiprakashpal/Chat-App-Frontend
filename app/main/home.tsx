@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -14,7 +16,9 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+
 import { AuthContext } from "../context/Authcontext";
 import LogoutPopup from "../Popup/logout";
 import { ENDPOINTS } from "../services/api/endpoints";
@@ -82,6 +86,54 @@ export default function Home() {
   const { logout, user: authUser } = useContext(AuthContext);
   const { width } = useWindowDimensions();
   const isTabletOrWeb = width >= 768;
+
+  const backgroundDrift = useRef(new Animated.Value(0)).current;
+  const backgroundPulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const driftAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(backgroundDrift, {
+          toValue: 1,
+          duration: 9000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(backgroundDrift, {
+          toValue: 0,
+          duration: 9000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(backgroundPulse, {
+          toValue: 1,
+          duration: 4200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(backgroundPulse, {
+          toValue: 0,
+          duration: 4200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    driftAnimation.start();
+    pulseAnimation.start();
+
+    return () => {
+      driftAnimation.stop();
+      pulseAnimation.stop();
+    };
+  }, [backgroundDrift, backgroundPulse]);
+
 
   // States
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -753,12 +805,56 @@ export default function Home() {
     </>
   );
 
-return (
+  const backgroundStyles = [styles.backgroundBase];
+  return (
+
     <SafeAreaProvider>
       <SafeAreaView style={[styles.container, isTabletOrWeb && styles.containerLarge]}>
+        <View style={backgroundStyles} pointerEvents="none">
+          <Animated.View
+            style={[
+              styles.backgroundBand,
+              styles.backgroundBandPrimary,
+              {
+                opacity: isTabletOrWeb ? 0.32 : 0.5,
+                transform: [
+                  { translateX: backgroundDrift.interpolate({ inputRange: [0, 1], outputRange: [-42, 34] }) },
+                  { rotate: "-16deg" },
+                ],
+              },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.backgroundBand,
+              styles.backgroundBandSecondary,
+              {
+                opacity: isTabletOrWeb ? 0.28 : 0.42,
+                transform: [
+                  { translateX: backgroundDrift.interpolate({ inputRange: [0, 1], outputRange: [38, -28] }) },
+                  { rotate: "18deg" },
+                ],
+              },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.backgroundGlow,
+              {
+                opacity: backgroundPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.36] }),
+                transform: [
+                  {
+                    scale: backgroundPulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.08] }),
+                  },
+                ],
+              },
+            ]}
+          />
+        </View>
         {isTabletOrWeb ? (
         <>
           <View style={styles.sidebar}>
+
             <View style={styles.sidebarIconsGroup}>
               <TouchableOpacity style={styles.profileIcon}>
                 <Ionicons name="person-circle-outline" size={36} color="#4F46E5" />
@@ -996,13 +1092,46 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
     paddingHorizontal: 16,
+    overflow: "hidden",
   },
   containerLarge: {
     flexDirection: "row",
     paddingHorizontal: 0,
   },
 
+  backgroundBase: {
+
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#F8FAFC",
+  },
+  backgroundBand: {
+    position: "absolute",
+    width: "130%",
+    height: 190,
+    borderRadius: 42,
+  },
+  backgroundBandPrimary: {
+    top: 44,
+    left: "-16%",
+    backgroundColor: "#CFFAFE",
+  },
+  backgroundBandSecondary: {
+    bottom: 78,
+    right: "-18%",
+    backgroundColor: "#FED7AA",
+  },
+  backgroundGlow: {
+    position: "absolute",
+    top: "26%",
+    right: "-18%",
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: "#A7F3D0",
+  },
+
   sidebar: {
+
     width: 80,
     backgroundColor: "#F8FAFC",
     paddingHorizontal: 12,
