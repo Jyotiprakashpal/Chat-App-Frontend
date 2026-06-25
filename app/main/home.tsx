@@ -8,6 +8,7 @@ import {
   Animated,
   Easing,
   FlatList,
+  Image,
   RefreshControl,
   StyleSheet,
   Text,
@@ -23,6 +24,8 @@ import { AuthContext } from "../context/Authcontext";
 import LogoutPopup from "../Popup/logout";
 import { ENDPOINTS } from "../services/api/endpoints";
 import API from "../services/api/method";
+import { uploadMedia } from "../services/api/uploadMedia";
+import { PickedMediaFile, pickImageFiles } from "../services/pickMedia";
 import socket, { connectSocket, sendSocketMessageAsync } from "../services/socket";
 import { Message } from "../types/message";
 import AllUserModal from "./chat/Utility/alluser";
@@ -63,6 +66,15 @@ interface SelectedUser {
 type SocketMessage = Message & {
   senderUser?: User;
   recipientUser?: User;
+};
+
+type PendingAttachment = {
+  filename?: string;
+  url?: string;
+  contentType?: string;
+  format?: string;
+  resourceType?: string;
+  localUri?: string;
 };
 
 const getMessageUserId = (value: Message["sender"] | Message["recipient"]) => {
@@ -145,18 +157,20 @@ export default function Home() {
   const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
   const [logoutVisible, setLogoutVisible] = useState(false);
 
-  // ✅ Logout popup state
+  // Ã¢Å“â€¦ Logout popup state
   const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
   const [mobileChatVisible, setMobileChatVisible] = useState(false);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatFlatListRef, setChatFlatListRef] = useState(null);
 
 
-  // ✅ Mobile menu state + Mobile chat modal state
-  // ✅ Message input state
+  // Ã¢Å“â€¦ Mobile menu state + Mobile chat modal state
+  // Ã¢Å“â€¦ Message input state
   const [message, setMessage] = useState("");
+  const [selectedMediaFiles, setSelectedMediaFiles] = useState<PickedMediaFile[]>([]);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
 
-  // ✅ Fetch conversations using ENDPOINTS
+  // Ã¢Å“â€¦ Fetch conversations using ENDPOINTS
   const fetchConversations = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
@@ -182,7 +196,7 @@ export default function Home() {
     }
   };
 
-  // ✅ Handle mobile menu item press
+  // Ã¢Å“â€¦ Handle mobile menu item press
   const handleMobileMenuItemPress = useCallback((action: string) => {
     setMobileMenuVisible(false);
 
@@ -198,7 +212,7 @@ export default function Home() {
     }
   }, [handleLogout]);
 
-  // ✅ Handle user selection - Different behavior for mobile/desktop
+  // Ã¢Å“â€¦ Handle user selection - Different behavior for mobile/desktop
   const fetchChatMessages = useCallback(async (recipientEmail: string) => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -252,28 +266,40 @@ export default function Home() {
     }
   }, [isTabletOrWeb, fetchChatMessages, markConversationAsRead]);
 
-  // ✅ Close mobile chat and go back to conversations
+  // Ã¢Å“â€¦ Close mobile chat and go back to conversations
   const handleBackToConversations = useCallback(() => {
     setMobileChatVisible(false);
     setSelectedUser(null);
     setMessage("");
+    setSelectedMediaFiles([]);
   }, []);
 
-  // ✅ Handle sending message using ENDPOINTS
+  // Ã¢Å“â€¦ Handle sending message using ENDPOINTS
   const handleSendMessage = useCallback(async () => {
-    if (!message.trim() || !selectedUser) {
-      Alert.alert("Error", "Please select a user and enter a message");
+    const hasText = Boolean(message.trim());
+    const hasMedia = selectedMediaFiles.length > 0;
+
+    if ((!hasText && !hasMedia) || !selectedUser) {
+      Alert.alert("Error", "Please select a user and enter a message or media");
       return;
     }
 
-    const content = message.trim();
+    const content = message.trim() || (hasMedia ? "Sent an attachment" : "");
     const recipient = selectedUser;
-    const tempId = `temp-${Date.now()}`;
+    const tempId = `temp-${hasMedia ? "media" : "text"}-${Date.now()}`;
+    const pendingAttachments: PendingAttachment[] = selectedMediaFiles.map((file) => ({
+      filename: file.name,
+      url: file.uri,
+      localUri: file.uri,
+      contentType: file.type,
+      resourceType: file.type?.startsWith("video") ? "video" : "image",
+    }));
     const optimisticMessage: Message = {
       _id: tempId,
       sender: authUser?._id || authUser?.email || "",
       recipient: recipient.id || recipient.email,
       content,
+      attachments: pendingAttachments,
       createdAt: new Date().toISOString(),
       read: false,
       status: "pending",
@@ -282,16 +308,36 @@ export default function Home() {
 
     setChatMessages(prev => [optimisticMessage, ...prev]);
     setMessage("");
+    setSelectedMediaFiles([]);
 
     try {
+      setIsUploadingMedia(hasMedia);
+
       const saveWithApi = async () => {
+        const uploadedAttachments = hasMedia
+          ? (await uploadMedia(selectedMediaFiles)).map((file) => ({
+              filename: file.filename || file.publicId,
+              url: file.url,
+              contentType: file.contentType,
+              format: file.format,
+              resourceType: file.resourceType,
+            }))
+          : [];
+
         const savedMessage = await API.post(ENDPOINTS.CHAT.MESSAGES, {
           recipient: recipient.email,
-          content
+          content,
+          attachments: uploadedAttachments,
         });
+
         setChatMessages(prev => prev.map(item => item._id === tempId ? { ...savedMessage, status: savedMessage.read ? "read" : "sent" } : item));
         fetchConversations(true);
       };
+
+      if (hasMedia) {
+        await saveWithApi();
+        return;
+      }
 
       if (!socket.connected) {
         await saveWithApi();
@@ -308,33 +354,125 @@ export default function Home() {
       fetchConversations(true);
     } catch (error: any) {
       setChatMessages(prev => prev.map(item => item._id === tempId ? { ...item, status: "pending" } : item));
+      Alert.alert("Send failed", error?.message || "Could not send this message");
+    } finally {
+      setIsUploadingMedia(false);
     }
-  }, [message, selectedUser, authUser?._id, authUser?.email, fetchConversations]);
+  }, [message, selectedMediaFiles, selectedUser, authUser?._id, authUser?.email, fetchConversations]);
+
+  const handlePickAndUploadMedia = useCallback(async () => {
+    if (!selectedUser) {
+      Alert.alert("Error", "Please select a user before attaching media");
+      return;
+    }
+
+    try {
+      const pickedFiles = await pickImageFiles();
+      if (!pickedFiles || pickedFiles.length === 0) return;
+      setSelectedMediaFiles(prev => [...prev, ...pickedFiles]);
+    } catch (error: any) {
+      Alert.alert("Media picker failed", error?.message || "Could not pick media");
+    }
+  }, [selectedUser]);
+
+  const removeSelectedMedia = useCallback((indexToRemove: number) => {
+    setSelectedMediaFiles(prev => prev.filter((_, index) => index !== indexToRemove));
+  }, []);
+
+  const renderMessageContent = useCallback((item: Message, isMyMessage: boolean, compact = false) => {
+    const messageTextStyle = compact
+      ? (isMyMessage ? styles.chatMyMessageText : styles.chatOtherMessageText)
+      : (isMyMessage ? styles.myMessageText : styles.otherMessageText);
+    const attachmentTextStyle = isMyMessage ? styles.myAttachmentText : styles.otherAttachmentText;
+    const hasAttachments = Array.isArray(item.attachments) && item.attachments.length > 0;
+
+    return (
+      <View style={hasAttachments ? styles.attachmentMessageBody : undefined}>
+        {!!item.content && item.content !== "Sent an attachment" && (
+          <Text style={messageTextStyle}>{item.content}</Text>
+        )}
+        {hasAttachments && item.attachments?.map((attachment, index) => (
+          <View key={`${attachment.filename || attachment.url || index}-${index}`}>
+            {attachment.contentType?.startsWith("image") && attachment.url ? (
+              <Image source={{ uri: attachment.url }} style={compact ? styles.chatAttachmentImage : styles.attachmentImage} />
+            ) : (
+              <View
+                style={[styles.attachmentChip, isMyMessage ? styles.myAttachmentChip : styles.otherAttachmentChip]}
+              >
+                <Ionicons
+                  name={attachment.resourceType === "video" || attachment.contentType?.startsWith("video") ? "videocam" : "document-attach"}
+                  size={16}
+                  color={isMyMessage ? "#EEF2FF" : "#4F46E5"}
+                />
+                <Text numberOfLines={1} style={attachmentTextStyle}>
+                  {attachment.filename || attachment.url || "Uploaded media"}
+                </Text>
+              </View>
+            )}
+          </View>
+        ))}
+        {!hasAttachments && (
+          <Text style={messageTextStyle}>{item.content}</Text>
+        )}
+      </View>
+    );
+  }, []);
+
+  const renderSelectedMediaPreview = useCallback(() => {
+    if (selectedMediaFiles.length === 0) return null;
+
+    return (
+      <View style={styles.selectedMediaStrip}>
+        {selectedMediaFiles.map((file, index) => {
+          const isImage = file.type?.startsWith("image");
+
+          return (
+            <View key={`${file.uri}-${index}`} style={styles.selectedMediaItem}>
+              {isImage ? (
+                <Image source={{ uri: file.uri }} style={styles.selectedMediaImage} />
+              ) : (
+                <View style={styles.selectedMediaFile}>
+                  <Ionicons name="videocam" size={24} color="#4F46E5" />
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.removeMediaButton}
+                onPress={() => removeSelectedMedia(index)}
+                disabled={isUploadingMedia}
+              >
+                <Ionicons name="close" size={14} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+      </View>
+    );
+  }, [selectedMediaFiles, removeSelectedMedia, isUploadingMedia]);
 
 
 
   const getOtherParticipant = useCallback((conversation: Conversation): User | undefined => {
-    console.log("🔍 getOtherParticipant - conversation:", conversation);
+    console.log("Ã°Å¸â€Â getOtherParticipant - conversation:", conversation);
     
     // For self-chats or single participant convos - return first participant
     if (conversation.participants && Array.isArray(conversation.participants) && conversation.participants.length > 0) {
       const fallback = conversation.participants[0];
-      console.log("✅ Using first participant (self-chat):", fallback);
+      console.log("Ã¢Å“â€¦ Using first participant (self-chat):", fallback);
       return fallback;
     }
     
     // First, try to get from partner field (API response format)
     if (conversation.partner) {
       if (conversation.partner._id !== authUser?._id && conversation.partner.email !== authUser?.email) {
-        console.log("✅ Found partner:", conversation.partner);
+        console.log("Ã¢Å“â€¦ Found partner:", conversation.partner);
         return conversation.partner;
       } else {
-        console.log("✅ Partner is self - using:", conversation.partner);
+        console.log("Ã¢Å“â€¦ Partner is self - using:", conversation.partner);
         return conversation.partner;
       }
     }
 
-    console.log("❌ No participant found for conversation:", conversation._id);
+    console.log("Ã¢ÂÅ’ No participant found for conversation:", conversation._id);
     return undefined;
   }, [authUser?._id, authUser?.email]);
 
@@ -520,9 +658,9 @@ export default function Home() {
       <TouchableOpacity
         style={styles.chatItem}
         onPress={async () => {
-          console.log('🔥 CLICKED CHAT:', item._id);
+          console.log('Ã°Å¸â€Â¥ CLICKED CHAT:', item._id);
           const recipientEmail = otherUser?.email || (item.participants && item.participants[0]?.email) || item.partner?.email || '';
-          console.log('📧 Using recipientEmail:', recipientEmail);
+          console.log('Ã°Å¸â€œÂ§ Using recipientEmail:', recipientEmail);
           
           if (recipientEmail) {
             try {
@@ -530,14 +668,14 @@ export default function Home() {
               const token = await AsyncStorage.getItem("token");
               console.log('Token:', token ? 'Present' : 'Missing');
               const responseData = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${recipientEmail}`, undefined, token ?? undefined);
-              console.log('✅ API response data:', responseData);
+              console.log('Ã¢Å“â€¦ API response data:', responseData);
               console.log('responseData type:', typeof responseData, 'Array?', Array.isArray(responseData));
               
               setChatMessages((responseData || []).reverse());
-              console.log('✅ setChatMessages called with', (responseData || []).length, 'messages');
+              console.log('Ã¢Å“â€¦ setChatMessages called with', (responseData || []).length, 'messages');
               
               if (Array.isArray(responseData)) {
-                console.log('📱 MESSAGES:', responseData.map((msg, i) => ({
+                console.log('Ã°Å¸â€œÂ± MESSAGES:', responseData.map((msg, i) => ({
                   i, content: msg.content, sender: msg.sender, recipient: msg.recipient
                 })));
               }
@@ -554,11 +692,11 @@ export default function Home() {
                 setMobileChatVisible(true);
               }
             } catch (error) {
-              console.error('❌ Message fetch error:', error);
+              console.error('Ã¢ÂÅ’ Message fetch error:', error);
               Alert.alert('Error', 'Failed to load messages');
             }
           } else {
-            console.error('❌ No recipient email found');
+            console.error('Ã¢ÂÅ’ No recipient email found');
           }
         }}
         activeOpacity={0.7}
@@ -613,7 +751,7 @@ export default function Home() {
     );
   }
 
-  // ✅ Mobile Header Component
+  // Ã¢Å“â€¦ Mobile Header Component
   const renderMobileHeader = () => (
     <View style={styles.header}>
       <Text style={styles.title}>JyoChat</Text>
@@ -626,7 +764,7 @@ export default function Home() {
     </View>
   );
 
-  // ✅ Mobile Menu Modal
+  // Ã¢Å“â€¦ Mobile Menu Modal
   const renderMobileMenu = () => (
     <>
       <TouchableOpacity
@@ -690,7 +828,7 @@ export default function Home() {
     </>
   );
 
-  // ✅ Mobile Full Screen Chat Modal
+  // Ã¢Å“â€¦ Mobile Full Screen Chat Modal
   const renderMobileChat = () => (
     <>
       <TouchableOpacity
@@ -756,9 +894,7 @@ export default function Home() {
                         isMyMessage ? styles.myMessage : styles.otherMessage,
                       ]}
                     >
-                      <Text style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
-                        {item.content}
-                      </Text>
+                      {renderMessageContent(item, isMyMessage)}
                       <View style={[styles.messageFooter, isMyMessage ? styles.myMessageFooter : styles.otherMessageFooter]}>
                         <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
                           {formatTime(item.createdAt)}
@@ -783,8 +919,11 @@ export default function Home() {
         </View>
 
         <View style={styles.mobileChatInputContainer}>
-          <TextInput
-            style={styles.mobileChatInput}
+          {renderSelectedMediaPreview()}
+          <View style={styles.inputRow}>
+          <View style={styles.mobileInputShell}>
+            <TextInput
+              style={styles.mobileChatInput}
             placeholder="Type a message..."
             placeholderTextColor="#94A3B8"
             value={message}
@@ -792,14 +931,27 @@ export default function Home() {
             onSubmitEditing={handleSendMessage}
             returnKeyType="send"
             blurOnSubmit={false}
-          />
+            />
+            <TouchableOpacity
+              style={styles.mediaPickerButton}
+              onPress={handlePickAndUploadMedia}
+              disabled={isUploadingMedia}
+            >
+              {isUploadingMedia ? (
+                <ActivityIndicator size="small" color="#4F46E5" />
+              ) : (
+                <Ionicons name="image-outline" size={21} color="#4F46E5" />
+              )}
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
-            style={[styles.mobileSendButton, !message.trim() && styles.sendButtonDisabled]}
+            style={[styles.mobileSendButton, !message.trim() && selectedMediaFiles.length === 0 && styles.sendButtonDisabled]}
             onPress={handleSendMessage}
-            disabled={!message.trim()}
+            disabled={(!message.trim() && selectedMediaFiles.length === 0) || isUploadingMedia}
           >
             <Ionicons name="send" size={20} color="#fff" />
           </TouchableOpacity>
+          </View>
         </View>
       </View>
     </>
@@ -973,9 +1125,7 @@ export default function Home() {
                                 isMyMessage ? styles.chatMyMessage : styles.chatOtherMessage,
                               ]}
                             >
-                              <Text style={isMyMessage ? styles.chatMyMessageText : styles.chatOtherMessageText}>
-                                {item.content}
-                              </Text>
+                              {renderMessageContent(item, isMyMessage, true)}
                               <View style={[styles.messageFooter, isMyMessage ? styles.myMessageFooter : styles.otherMessageFooter]}>
                                 <Text style={isMyMessage ? styles.chatMessageTime : styles.chatOtherMessageTime}>
                                   {formatTime(item.createdAt)}
@@ -999,8 +1149,11 @@ export default function Home() {
                   )}
                 </View>
                 <View style={styles.chatInputContainer}>
-                  <TextInput
-                    style={styles.chatInput}
+                  {renderSelectedMediaPreview()}
+                  <View style={styles.inputRow}>
+                  <View style={styles.inputShell}>
+                    <TextInput
+                      style={styles.chatInput}
                     placeholder="Type a message..."
                     placeholderTextColor="#94A3B8"
                     value={message}
@@ -1008,14 +1161,27 @@ export default function Home() {
                     onSubmitEditing={handleSendMessage}
                     returnKeyType="send"
                     blurOnSubmit={false}
-                  />
+                    />
+                    <TouchableOpacity
+                      style={styles.mediaPickerButton}
+                      onPress={handlePickAndUploadMedia}
+                      disabled={isUploadingMedia}
+                    >
+                      {isUploadingMedia ? (
+                        <ActivityIndicator size="small" color="#4F46E5" />
+                      ) : (
+                        <Ionicons name="image-outline" size={21} color="#4F46E5" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
                   <TouchableOpacity
-                    style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
+                    style={[styles.sendButton, !message.trim() && selectedMediaFiles.length === 0 && styles.sendButtonDisabled]}
                     onPress={handleSendMessage}
-                    disabled={!message.trim()}
+                    disabled={(!message.trim() && selectedMediaFiles.length === 0) || isUploadingMedia}
                   >
                     <Ionicons name="send" size={20} color="#fff" />
                   </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             ) : (
@@ -1247,22 +1413,37 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   chatInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 24,
     paddingVertical: 16,
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
   },
-  chatInput: {
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  inputShell: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#F8FAFC",
     borderRadius: 24,
-    paddingHorizontal: 20,
+    marginRight: 12,
+    paddingLeft: 20,
+    paddingRight: 8,
+  },
+  chatInput: {
+    flex: 1,
     paddingVertical: 12,
     fontSize: 16,
     color: "#1E293B",
-    marginRight: 12,
+  },
+  mediaPickerButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: "center",
+    alignItems: "center",
   },
   sendButton: {
     width: 48,
@@ -1319,6 +1500,46 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#94A3B8',
     textAlign: 'left',
+  },
+  attachmentMessageBody: {
+    gap: 6,
+  },
+  attachmentImage: {
+    width: 220,
+    height: 160,
+    borderRadius: 14,
+    backgroundColor: "#E5E7EB",
+  },
+  chatAttachmentImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 14,
+    backgroundColor: "#E5E7EB",
+  },
+  attachmentChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    maxWidth: 240,
+  },
+  myAttachmentChip: {
+    backgroundColor: "#4F46E5",
+  },
+  otherAttachmentChip: {
+    backgroundColor: "#E5E7EB",
+  },
+  myAttachmentText: {
+    color: "#fff",
+    fontSize: 13,
+    flexShrink: 1,
+  },
+  otherAttachmentText: {
+    color: "#1E293B",
+    fontSize: 13,
+    flexShrink: 1,
   },
   messageFooter: {
     flexDirection: "row",
@@ -1681,23 +1902,65 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mobileChatInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 16,
     backgroundColor: '#F8FAFC',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
   },
-  mobileChatInput: {
+  selectedMediaStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  selectedMediaItem: {
+    width: 62,
+    height: 62,
+    borderRadius: 12,
+    backgroundColor: '#E5E7EB',
+    position: 'relative',
+    overflow: 'visible',
+  },
+  selectedMediaImage: {
+    width: 62,
+    height: 62,
+    borderRadius: 12,
+  },
+  selectedMediaFile: {
+    width: 62,
+    height: 62,
+    borderRadius: 12,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeMediaButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#111827',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mobileInputShell: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 24,
-    paddingHorizontal: 20,
+    marginRight: 12,
+    paddingLeft: 20,
+    paddingRight: 8,
+  },
+  mobileChatInput: {
+    flex: 1,
     paddingVertical: 12,
     fontSize: 16,
     color: '#1E293B',
-    marginRight: 12,
     maxHeight: 100,
   },
   mobileSendButton: {
@@ -1729,3 +1992,8 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
 });
+
+
+
+
+

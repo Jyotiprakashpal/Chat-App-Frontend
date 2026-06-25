@@ -230,9 +230,30 @@ export default function ChatScreen() {
           isMyMessage ? styles.myMessage : styles.otherMessage,
         ]}
       >
-        <Text style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
-          {item.content}
-        </Text>
+        {item.attachments && Array.isArray(item.attachments) && item.attachments.length > 0 ? (
+          <View style={{ gap: 8 }}>
+            {item.attachments.map((att: any, idx: number) => (
+              <View key={`${att.filename || att.publicId || idx}-${idx}`}>
+                {att.contentType && typeof att.contentType === "string" && att.contentType.startsWith("image") ? (
+                  <View style={{ width: 220, height: 160, backgroundColor: "#E5E7EB", borderRadius: 10, overflow: "hidden" }}>
+                    {/* Using <Image> would require import; for now we show URL as text if Image import is missing */}
+                    <Text numberOfLines={4} style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
+                      {att.url}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text numberOfLines={2} style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
+                    {att.url}
+                  </Text>
+                )}
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
+            {item.content}
+          </Text>
+        )}
         <View style={[styles.messageFooter, isMyMessage ? styles.myMessageFooter : styles.otherMessageFooter]}>
           <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
             {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

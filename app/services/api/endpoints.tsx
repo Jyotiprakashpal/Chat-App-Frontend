@@ -17,6 +17,12 @@ export const ENDPOINTS = {
   APP: {
     VERSION: '/app/version',
   },
+  // Image endpoints
+  IMAGES: {
+    UPLOAD: '/images/upload',
+    GET: '/images', // GET /images/:filename
+    DELETE: '/images', // DELETE /images/:filename
+  },
   // User endpoints
   USER: {
     GET_PROFILE: '/user/profile',
