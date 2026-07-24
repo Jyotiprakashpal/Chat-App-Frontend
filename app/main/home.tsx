@@ -9,6 +9,8 @@ import {
   Easing,
   FlatList,
   Image,
+  Modal,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
@@ -69,12 +71,19 @@ type SocketMessage = Message & {
 };
 
 type PendingAttachment = {
+  publicId?: string;
   filename?: string;
   url?: string;
   contentType?: string;
   format?: string;
   resourceType?: string;
   localUri?: string;
+};
+
+type MessageActionTarget = {
+  type: "text" | "media";
+  message: Message;
+  attachment?: PendingAttachment;
 };
 
 const getMessageUserId = (value: Message["sender"] | Message["recipient"]) => {
@@ -162,11 +171,14 @@ export default function Home() {
   const [mobileChatVisible, setMobileChatVisible] = useState(false);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatFlatListRef, setChatFlatListRef] = useState(null);
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
 
 
   // Ã¢Å“â€¦ Mobile menu state + Mobile chat modal state
   // Ã¢Å“â€¦ Message input state
   const [message, setMessage] = useState("");
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [messageActionTarget, setMessageActionTarget] = useState<MessageActionTarget | null>(null);
   const [selectedMediaFiles, setSelectedMediaFiles] = useState<PickedMediaFile[]>([]);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
 
@@ -271,6 +283,7 @@ export default function Home() {
     setMobileChatVisible(false);
     setSelectedUser(null);
     setMessage("");
+    setEditingMessage(null);
     setSelectedMediaFiles([]);
   }, []);
 
@@ -278,6 +291,26 @@ export default function Home() {
   const handleSendMessage = useCallback(async () => {
     const hasText = Boolean(message.trim());
     const hasMedia = selectedMediaFiles.length > 0;
+
+    if (editingMessage) {
+      if (!hasText) {
+        Alert.alert("Error", "Message cannot be empty");
+        return;
+      }
+
+      try {
+        const updatedMessage = await API.put(`${ENDPOINTS.CHAT.MESSAGES}/${editingMessage._id}`, {
+          content: message.trim(),
+        });
+        setChatMessages(prev => prev.map(item => item._id === updatedMessage._id ? updatedMessage : item));
+        setEditingMessage(null);
+        setMessage("");
+        fetchConversations(true);
+      } catch (error: any) {
+        Alert.alert("Edit failed", error?.message || "Could not edit this message");
+      }
+      return;
+    }
 
     if ((!hasText && !hasMedia) || !selectedUser) {
       Alert.alert("Error", "Please select a user and enter a message or media");
@@ -316,9 +349,14 @@ export default function Home() {
       const saveWithApi = async () => {
         const uploadedAttachments = hasMedia
           ? (await uploadMedia(selectedMediaFiles)).map((file) => ({
+              message: file.message,
+              publicId: file.publicId,
               filename: file.filename || file.publicId,
               url: file.url,
               contentType: file.contentType,
+              bytes: file.bytes,
+              width: file.width,
+              height: file.height,
               format: file.format,
               resourceType: file.resourceType,
             }))
@@ -328,6 +366,7 @@ export default function Home() {
           recipient: recipient.email,
           content,
           attachments: uploadedAttachments,
+          ...(uploadedAttachments.length > 0 ? { attachment: { images: uploadedAttachments } } : {}),
         });
 
         setChatMessages(prev => prev.map(item => item._id === tempId ? { ...savedMessage, status: savedMessage.read ? "read" : "sent" } : item));
@@ -358,7 +397,12 @@ export default function Home() {
     } finally {
       setIsUploadingMedia(false);
     }
-  }, [message, selectedMediaFiles, selectedUser, authUser?._id, authUser?.email, fetchConversations]);
+  }, [message, selectedMediaFiles, selectedUser, authUser?._id, authUser?.email, fetchConversations, editingMessage]);
+
+  const cancelEditingMessage = useCallback(() => {
+    setEditingMessage(null);
+    setMessage("");
+  }, []);
 
   const handlePickAndUploadMedia = useCallback(async () => {
     if (!selectedUser) {
@@ -379,25 +423,218 @@ export default function Home() {
     setSelectedMediaFiles(prev => prev.filter((_, index) => index !== indexToRemove));
   }, []);
 
+  const updateMessageInState = useCallback((updatedMessage: Message) => {
+    setChatMessages(prev => prev.map(item => item._id === updatedMessage._id ? updatedMessage : item));
+    fetchConversations(true);
+  }, [fetchConversations]);
+
+  const handleDeleteTextMessage = useCallback(async (item: Message) => {
+    setMessageActionTarget(null);
+    try {
+      const updatedMessage = await API.delete(`${ENDPOINTS.CHAT.MESSAGES}/${item._id}`);
+      updateMessageInState(updatedMessage);
+      if (editingMessage?._id === item._id) {
+        cancelEditingMessage();
+      }
+    } catch (error: any) {
+      Alert.alert("Delete failed", error?.message || "Could not delete this message");
+    }
+  }, [cancelEditingMessage, editingMessage?._id, updateMessageInState]);
+
+  const startEditingTextMessage = useCallback((item: Message) => {
+    setMessageActionTarget(null);
+    setSelectedMediaFiles([]);
+    setEditingMessage(item);
+    setMessage(item.content || "");
+  }, []);
+
+  const handleMessageLongPress = useCallback((item: Message, isMyMessage: boolean) => {
+    const hasAttachments = (Array.isArray(item.attachments) && item.attachments.length > 0) ||
+      (Array.isArray(item.attachment?.images) && item.attachment.images.length > 0);
+
+    if (!isMyMessage || item.isDeleted || hasAttachments) return;
+
+    setMessageActionTarget({ type: "text", message: item });
+  }, []);
+
+  const getAttachmentPublicId = useCallback((attachment: PendingAttachment) => {
+    if (attachment.publicId) return attachment.publicId;
+    if (attachment.filename) return attachment.filename;
+
+    if (!attachment.url) return undefined;
+
+    const uploadMarker = "/upload/";
+    const uploadIndex = attachment.url.indexOf(uploadMarker);
+    if (uploadIndex === -1) return undefined;
+
+    const pathAfterUpload = attachment.url.slice(uploadIndex + uploadMarker.length);
+    const withoutVersion = pathAfterUpload.replace(/^v\d+\//, "");
+    return withoutVersion.replace(/\.[^/.?#]+(?:[?#].*)?$/, "");
+  }, []);
+
+  const handleDeleteAttachment = useCallback(async (item: Message, attachment: PendingAttachment) => {
+    setMessageActionTarget(null);
+    const filename = getAttachmentPublicId(attachment);
+
+    if (!filename) {
+      Alert.alert("Delete failed", "This media does not have a Cloudinary filename");
+      return;
+    }
+
+    try {
+      try {
+        await API.delete(`${ENDPOINTS.IMAGES.DELETE}/${encodeURIComponent(filename)}`);
+      } catch {
+        // If Cloudinary already removed it, still update chat history.
+      }
+
+      const updatedMessage = await API.put(`${ENDPOINTS.CHAT.MESSAGES}/${item._id}/media`, {
+        publicId: attachment.publicId || filename,
+        filename: attachment.filename || filename,
+        url: attachment.url,
+      });
+      updateMessageInState(updatedMessage);
+    } catch (error: any) {
+      Alert.alert("Delete failed", error?.message || "Could not delete this media");
+    }
+  }, [getAttachmentPublicId, updateMessageInState]);
+
+  const handleAttachmentLongPress = useCallback((item: Message, attachment: PendingAttachment, isMyMessage: boolean) => {
+    if (!isMyMessage || item.isDeleted || item.isMediaDeleted) return;
+
+    setMessageActionTarget({ type: "media", message: item, attachment });
+  }, []);
+
+  const renderEditingBanner = useCallback(() => {
+    if (!editingMessage) return null;
+
+    return (
+      <View style={styles.editingBanner}>
+        <Ionicons name="create-outline" size={18} color="#4F46E5" />
+        <Text numberOfLines={1} style={styles.editingBannerText}>Editing message</Text>
+        <TouchableOpacity onPress={cancelEditingMessage} style={styles.editingCancelButton}>
+          <Ionicons name="close" size={18} color="#64748B" />
+        </TouchableOpacity>
+      </View>
+    );
+  }, [cancelEditingMessage, editingMessage]);
+
+  const renderMessageActionSheet = useCallback(() => {
+    if (!messageActionTarget) return null;
+
+    const { type, message: targetMessage, attachment } = messageActionTarget;
+
+    return (
+      <Modal transparent visible animationType="fade" onRequestClose={() => setMessageActionTarget(null)}>
+        <View style={styles.actionSheetBackdrop}>
+          <TouchableOpacity
+            style={styles.actionSheetDismiss}
+            activeOpacity={1}
+            onPress={() => setMessageActionTarget(null)}
+          />
+          <View style={styles.actionSheet}>
+            <Text style={styles.actionSheetTitle}>
+              {type === "media" ? "Media options" : "Message options"}
+            </Text>
+            {type === "text" && (
+              <TouchableOpacity style={styles.actionSheetItem} onPress={() => startEditingTextMessage(targetMessage)}>
+                <Ionicons name="create-outline" size={20} color="#334155" />
+                <Text style={styles.actionSheetItemText}>Edit message</Text>
+              </TouchableOpacity>
+            )}
+            {type === "text" && (
+              <TouchableOpacity style={styles.actionSheetItem} onPress={() => handleDeleteTextMessage(targetMessage)}>
+                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                <Text style={[styles.actionSheetItemText, styles.actionSheetDangerText]}>Delete message</Text>
+              </TouchableOpacity>
+            )}
+            {type === "media" && attachment && (
+              <TouchableOpacity style={styles.actionSheetItem} onPress={() => handleDeleteAttachment(targetMessage, attachment)}>
+                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                <Text style={[styles.actionSheetItemText, styles.actionSheetDangerText]}>
+                  {attachment.contentType?.startsWith("image") ? "Delete image" : "Delete media"}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.actionSheetCancel} onPress={() => setMessageActionTarget(null)}>
+              <Text style={styles.actionSheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }, [handleDeleteAttachment, handleDeleteTextMessage, messageActionTarget, startEditingTextMessage]);
+
+  const getMessageActionTarget = useCallback((item: Message, isMyMessage: boolean): MessageActionTarget | null => {
+    if (!isMyMessage || item.isDeleted || isPendingMessage(item)) return null;
+
+    const attachments = Array.isArray(item.attachments) && item.attachments.length > 0
+      ? item.attachments
+      : Array.isArray(item.attachment?.images)
+        ? item.attachment.images
+        : [];
+
+    if (attachments.length > 0 && !item.isMediaDeleted) {
+      return { type: "media", message: item, attachment: attachments[0] };
+    }
+
+    return { type: "text", message: item };
+  }, []);
+
+  const openMessageActions = useCallback((item: Message, isMyMessage: boolean) => {
+    const target = getMessageActionTarget(item, isMyMessage);
+    if (target) {
+      setMessageActionTarget(target);
+    }
+  }, [getMessageActionTarget]);
+
   const renderMessageContent = useCallback((item: Message, isMyMessage: boolean, compact = false) => {
     const messageTextStyle = compact
       ? (isMyMessage ? styles.chatMyMessageText : styles.chatOtherMessageText)
       : (isMyMessage ? styles.myMessageText : styles.otherMessageText);
     const attachmentTextStyle = isMyMessage ? styles.myAttachmentText : styles.otherAttachmentText;
-    const hasAttachments = Array.isArray(item.attachments) && item.attachments.length > 0;
+    const attachments = item.isMediaDeleted
+      ? []
+      : (Array.isArray(item.attachments) && item.attachments.length > 0
+        ? item.attachments
+        : Array.isArray(item.attachment?.images)
+          ? item.attachment.images
+          : []);
+    const hasAttachments = attachments.length > 0;
 
     return (
       <View style={hasAttachments ? styles.attachmentMessageBody : undefined}>
-        {!!item.content && item.content !== "Sent an attachment" && (
+        {hasAttachments && !!item.content && item.content !== "Sent an attachment" && (
           <Text style={messageTextStyle}>{item.content}</Text>
         )}
-        {hasAttachments && item.attachments?.map((attachment, index) => (
+        {hasAttachments && attachments.map((attachment, index) => (
           <View key={`${attachment.filename || attachment.url || index}-${index}`}>
             {attachment.contentType?.startsWith("image") && attachment.url ? (
-              <Image source={{ uri: attachment.url }} style={compact ? styles.chatAttachmentImage : styles.attachmentImage} />
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onLongPress={() => handleAttachmentLongPress(item, attachment, isMyMessage)}
+                delayLongPress={350}
+                {...(Platform.OS === "web" ? {
+                  onContextMenu: (event: any) => {
+                    event.preventDefault();
+                    handleAttachmentLongPress(item, attachment, isMyMessage);
+                  },
+                } : {})}
+              >
+                <Image source={{ uri: attachment.url }} style={compact ? styles.chatAttachmentImage : styles.attachmentImage} />
+              </TouchableOpacity>
             ) : (
-              <View
+              <TouchableOpacity
                 style={[styles.attachmentChip, isMyMessage ? styles.myAttachmentChip : styles.otherAttachmentChip]}
+                activeOpacity={0.85}
+                onLongPress={() => handleAttachmentLongPress(item, attachment, isMyMessage)}
+                delayLongPress={350}
+                {...(Platform.OS === "web" ? {
+                  onContextMenu: (event: any) => {
+                    event.preventDefault();
+                    handleAttachmentLongPress(item, attachment, isMyMessage);
+                  },
+                } : {})}
               >
                 <Ionicons
                   name={attachment.resourceType === "video" || attachment.contentType?.startsWith("video") ? "videocam" : "document-attach"}
@@ -407,16 +644,22 @@ export default function Home() {
                 <Text numberOfLines={1} style={attachmentTextStyle}>
                   {attachment.filename || attachment.url || "Uploaded media"}
                 </Text>
-              </View>
+              </TouchableOpacity>
             )}
           </View>
         ))}
         {!hasAttachments && (
-          <Text style={messageTextStyle}>{item.content}</Text>
+          <Text
+            style={messageTextStyle}
+            onLongPress={() => handleMessageLongPress(item, isMyMessage)}
+          >
+            {item.content}
+            {item.editedAt && !item.isDeleted ? " (edited)" : ""}
+          </Text>
         )}
       </View>
     );
-  }, []);
+  }, [handleAttachmentLongPress, handleMessageLongPress]);
 
   const renderSelectedMediaPreview = useCallback(() => {
     if (selectedMediaFiles.length === 0) return null;
@@ -476,6 +719,12 @@ export default function Home() {
     return undefined;
   }, [authUser?._id, authUser?.email]);
 
+  const isUserOnline = useCallback((userId?: string) => {
+    return Boolean(userId && onlineUserIds.has(userId));
+  }, [onlineUserIds]);
+
+  const selectedUserIsOnline = isUserOnline(selectedUser?.id);
+
   const getDateHeader = useCallback((dateString: string): string => {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return "";
@@ -528,8 +777,6 @@ export default function Home() {
       }
     };
 
-    setupSocket();
-
     const handleNewMessage = async (incomingMessage: SocketMessage) => {
       const senderId = getMessageUserId(incomingMessage.sender);
       const recipientId = getMessageUserId(incomingMessage.recipient);
@@ -580,6 +827,37 @@ export default function Home() {
     socket.on("newMessage", handleNewMessage);
     socket.on("receiveMessage", handleNewMessage);
 
+    const handleMessageUpdated = (updatedMessage: Message) => {
+      setChatMessages(prev => prev.map(item => item._id === updatedMessage._id ? updatedMessage : item));
+      fetchConversations(true);
+    };
+
+    socket.on("messageUpdated", handleMessageUpdated);
+
+    const handleOnlineUsers = (userIds: string[]) => {
+      setOnlineUserIds(new Set(userIds));
+    };
+
+    const handleUserOnline = (userId: string) => {
+      setOnlineUserIds(prev => {
+        const next = new Set(prev);
+        next.add(userId);
+        return next;
+      });
+    };
+
+    const handleUserOffline = (userId: string) => {
+      setOnlineUserIds(prev => {
+        const next = new Set(prev);
+        next.delete(userId);
+        return next;
+      });
+    };
+
+    socket.on("onlineUsers", handleOnlineUsers);
+    socket.on("userOnline", handleUserOnline);
+    socket.on("userOffline", handleUserOffline);
+
     const handleMessagesRead = (data: { readBy?: string }) => {
       setChatMessages(prev => prev.map(item => {
         const isMyMessage =
@@ -622,13 +900,27 @@ export default function Home() {
       }
     };
 
-    socket.on("connect", retryPendingMessages);
+    const handleSocketConnect = () => {
+      retryPendingMessages();
+      socket.emit("getOnlineUsers");
+    };
+
+    socket.on("connect", handleSocketConnect);
+
+    setupSocket();
+    if (socket.connected) {
+      socket.emit("getOnlineUsers");
+    }
 
     return () => {
       socket.off("newMessage", handleNewMessage);
       socket.off("receiveMessage", handleNewMessage);
+      socket.off("messageUpdated", handleMessageUpdated);
+      socket.off("onlineUsers", handleOnlineUsers);
+      socket.off("userOnline", handleUserOnline);
+      socket.off("userOffline", handleUserOffline);
       socket.off("messagesRead", handleMessagesRead);
-      socket.off("connect", retryPendingMessages);
+      socket.off("connect", handleSocketConnect);
     };
   }, [authUser?._id, authUser?.email, selectedUser, chatMessages, fetchConversations, markConversationAsRead]);
 
@@ -653,6 +945,12 @@ export default function Home() {
   const renderItem = useCallback(({ item }: { item: Conversation }) => {
     const otherUser = getOtherParticipant(item);
     const unreadCount = item.unreadCount || 0;
+    const isOnline = isUserOnline(otherUser?._id);
+    const isLoggedInUser =
+      otherUser?._id === authUser?._id ||
+      otherUser?.email === authUser?.email;
+    const baseDisplayName = otherUser?.name || otherUser?.username || "Chat";
+    const displayName = isLoggedInUser ? `${baseDisplayName} (you)` : baseDisplayName;
 
     return (
       <TouchableOpacity
@@ -680,7 +978,6 @@ export default function Home() {
                 })));
               }
               
-            const displayName = otherUser?.name || otherUser?.username || "Chat";
               const userData = {
                 id: otherUser?._id || recipientEmail,
                 name: displayName,
@@ -707,12 +1004,12 @@ export default function Home() {
               otherUser?.username?.charAt(0).toUpperCase() ||
               otherUser?.email?.charAt(0).toUpperCase() || "?"}
           </Text>
-          <View style={styles.onlineDot} />
+          <View style={[styles.onlineDot, !isOnline && styles.offlineDot]} />
         </View>
         <View style={styles.chatInfo}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>
-              {otherUser?.username?.includes("(You)") ? "(You)" : (otherUser?.name || otherUser?.username || "Chat")}
+              {displayName}
             </Text>
             <View style={styles.chatMeta}>
               <Text style={[styles.time, unreadCount > 0 && styles.unreadTime]} numberOfLines={1}>
@@ -741,7 +1038,7 @@ export default function Home() {
         <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
       </TouchableOpacity>
     );
-  }, [getOtherParticipant, formatTime, authUser?.email, isTabletOrWeb, markConversationAsRead]);
+  }, [getOtherParticipant, formatTime, authUser?._id, authUser?.email, isTabletOrWeb, markConversationAsRead, isUserOnline]);
 
   if (loading && !refreshing) {
     return (
@@ -848,7 +1145,9 @@ export default function Home() {
             <>
               <View style={styles.mobileChatHeaderInfo}>
                 <Text style={styles.mobileChatHeaderName}>{selectedUser.name}</Text>
-                <Text style={styles.mobileChatHeaderStatus}>Online</Text>
+                <Text style={[styles.mobileChatHeaderStatus, !selectedUserIsOnline && styles.offlineStatusText]}>
+                  {selectedUserIsOnline ? "Online" : "Offline"}
+                </Text>
               </View>
               <View style={styles.mobileChatHeaderAvatar}>
                 <Text style={styles.mobileChatHeaderAvatarText}>
@@ -888,14 +1187,32 @@ export default function Home() {
                         </Text>
                       </View>
                     )}
-                    <View
+                    <TouchableOpacity
                       style={[
                         styles.messageContainer,
                         isMyMessage ? styles.myMessage : styles.otherMessage,
                       ]}
+                      activeOpacity={0.9}
+                      onPress={() => openMessageActions(item, isMyMessage)}
+                      onLongPress={() => handleMessageLongPress(item, isMyMessage)}
+                      delayLongPress={350}
+                      {...(Platform.OS === "web" ? {
+                        onContextMenu: (event: any) => {
+                          event.preventDefault();
+                          handleMessageLongPress(item, isMyMessage);
+                        },
+                      } : {})}
                     >
                       {renderMessageContent(item, isMyMessage)}
                       <View style={[styles.messageFooter, isMyMessage ? styles.myMessageFooter : styles.otherMessageFooter]}>
+                        {getMessageActionTarget(item, isMyMessage) && (
+                          <TouchableOpacity
+                            style={styles.messageMenuButton}
+                            onPress={() => openMessageActions(item, isMyMessage)}
+                          >
+                            <Ionicons name="chevron-down" size={14} color={isMyMessage ? "#EEF2FF" : "#64748B"} />
+                          </TouchableOpacity>
+                        )}
                         <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
                           {formatTime(item.createdAt)}
                         </Text>
@@ -907,7 +1224,7 @@ export default function Home() {
                           />
                         )}
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   </View>
                 );
               }}
@@ -919,6 +1236,7 @@ export default function Home() {
         </View>
 
         <View style={styles.mobileChatInputContainer}>
+          {renderEditingBanner()}
           {renderSelectedMediaPreview()}
           <View style={styles.inputRow}>
           <View style={styles.mobileInputShell}>
@@ -935,7 +1253,7 @@ export default function Home() {
             <TouchableOpacity
               style={styles.mediaPickerButton}
               onPress={handlePickAndUploadMedia}
-              disabled={isUploadingMedia}
+              disabled={isUploadingMedia || Boolean(editingMessage)}
             >
               {isUploadingMedia ? (
                 <ActivityIndicator size="small" color="#4F46E5" />
@@ -1087,7 +1405,9 @@ export default function Home() {
                   </View>
                   <View style={styles.chatHeaderInfo}>
                     <Text style={styles.chatHeaderName}>{selectedUser.name}</Text>
-                    <Text style={styles.chatHeaderStatus}>Online</Text>
+                    <Text style={[styles.chatHeaderStatus, !selectedUserIsOnline && styles.offlineStatusText]}>
+                      {selectedUserIsOnline ? "Online" : "Offline"}
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.chatMessagesContainer}>
@@ -1119,14 +1439,32 @@ export default function Home() {
                                 </Text>
                               </View>
                             )}
-                            <View
+                            <TouchableOpacity
                               style={[
                                 styles.chatMessageContainer,
                                 isMyMessage ? styles.chatMyMessage : styles.chatOtherMessage,
                               ]}
+                              activeOpacity={0.9}
+                              onPress={() => openMessageActions(item, isMyMessage)}
+                              onLongPress={() => handleMessageLongPress(item, isMyMessage)}
+                              delayLongPress={350}
+                              {...(Platform.OS === "web" ? {
+                                onContextMenu: (event: any) => {
+                                  event.preventDefault();
+                                  handleMessageLongPress(item, isMyMessage);
+                                },
+                              } : {})}
                             >
                               {renderMessageContent(item, isMyMessage, true)}
                               <View style={[styles.messageFooter, isMyMessage ? styles.myMessageFooter : styles.otherMessageFooter]}>
+                                {getMessageActionTarget(item, isMyMessage) && (
+                                  <TouchableOpacity
+                                    style={styles.messageMenuButton}
+                                    onPress={() => openMessageActions(item, isMyMessage)}
+                                  >
+                                    <Ionicons name="chevron-down" size={14} color={isMyMessage ? "#EEF2FF" : "#64748B"} />
+                                  </TouchableOpacity>
+                                )}
                                 <Text style={isMyMessage ? styles.chatMessageTime : styles.chatOtherMessageTime}>
                                   {formatTime(item.createdAt)}
                                 </Text>
@@ -1138,7 +1476,7 @@ export default function Home() {
                                   />
                                 )}
                               </View>
-                            </View>
+                            </TouchableOpacity>
                           </View>
                         );
                       }}
@@ -1149,6 +1487,7 @@ export default function Home() {
                   )}
                 </View>
                 <View style={styles.chatInputContainer}>
+                  {renderEditingBanner()}
                   {renderSelectedMediaPreview()}
                   <View style={styles.inputRow}>
                   <View style={styles.inputShell}>
@@ -1165,7 +1504,7 @@ export default function Home() {
                     <TouchableOpacity
                       style={styles.mediaPickerButton}
                       onPress={handlePickAndUploadMedia}
-                      disabled={isUploadingMedia}
+                      disabled={isUploadingMedia || Boolean(editingMessage)}
                     >
                       {isUploadingMedia ? (
                         <ActivityIndicator size="small" color="#4F46E5" />
@@ -1243,6 +1582,8 @@ export default function Home() {
       {mobileMenuVisible && !isTabletOrWeb && renderMobileMenu()}
 
       {mobileChatVisible && !isTabletOrWeb && selectedUser && renderMobileChat()}
+
+      {renderMessageActionSheet()}
 
       <LogoutPopup
         visible={logoutVisible}
@@ -1391,6 +1732,9 @@ const styles = StyleSheet.create({
     color: "#22C55E",
     marginTop: 2,
   },
+  offlineStatusText: {
+    color: "#94A3B8",
+  },
   messagesContainer: {
     flex: 1,
     justifyContent: "center",
@@ -1417,6 +1761,86 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
+  },
+  editingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#EEF2FF",
+    borderLeftWidth: 3,
+    borderLeftColor: "#4F46E5",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  editingBannerText: {
+    flex: 1,
+    color: "#334155",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  editingCancelButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionSheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.34)",
+    justifyContent: "flex-end",
+    padding: 16,
+  },
+  actionSheetDismiss: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  actionSheet: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  actionSheetTitle: {
+    color: "#64748B",
+    fontSize: 13,
+    fontWeight: "700",
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  actionSheetItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  actionSheetItemText: {
+    color: "#334155",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  actionSheetDangerText: {
+    color: "#EF4444",
+  },
+  actionSheetCancel: {
+    alignItems: "center",
+    paddingVertical: 12,
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+  },
+  actionSheetCancelText: {
+    color: "#4F46E5",
+    fontSize: 16,
+    fontWeight: "700",
   },
   inputRow: {
     flexDirection: "row",
@@ -1547,6 +1971,13 @@ const styles = StyleSheet.create({
     gap: 4,
     marginTop: 2,
   },
+  messageMenuButton: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   myMessageFooter: {
     justifyContent: "flex-end",
   },
@@ -1675,6 +2106,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#22C55E",
     borderWidth: 3,
     borderColor: "#fff",
+  },
+  offlineDot: {
+    backgroundColor: "#94A3B8",
   },
   chatInfo: {
     flex: 1,

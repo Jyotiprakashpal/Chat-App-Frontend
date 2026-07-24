@@ -94,6 +94,10 @@ export const API = {
   put: async (endpoint: string, data: any): Promise<any> => {
     return fetchWithAuth(endpoint, "PUT", data);
   },
+
+  delete: async (endpoint: string, data?: any): Promise<any> => {
+    return fetchWithAuth(endpoint, "DELETE", data);
+  },
 };
 
 export default API;

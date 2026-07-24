@@ -5,12 +5,16 @@ import { BASE_URL } from "./baseurl";
 import { ENDPOINTS } from "./endpoints";
 
 export type UploadedMediaFile = {
+  message?: string;
+  publicId?: string;
   filename?: string;
   url?: string;
   contentType?: string;
+  bytes?: number;
+  width?: number;
+  height?: number;
   format?: string;
   resourceType?: string;
-  publicId?: string;
 };
 
 export const uploadMedia = async (files: PickedMediaFile[]): Promise<UploadedMediaFile[]> => {

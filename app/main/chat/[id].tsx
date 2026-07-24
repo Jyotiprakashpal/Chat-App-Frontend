@@ -4,6 +4,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
 import {
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -37,7 +38,31 @@ export default function ChatScreen() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  const [partnerUserId, setPartnerUserId] = useState<string | undefined>(
+    chatPartnerId?.match(/^[0-9a-fA-F]{24}$/) ? chatPartnerId : undefined
+  );
   const flatListRef = useRef<FlatList>(null);
+  const isPartnerOnline = Boolean(partnerUserId && onlineUserIds.has(partnerUserId));
+
+  const updatePartnerUserIdFromMessages = (items: Message[]) => {
+    const partnerMessage = items.find((item) => {
+      const senderId = getMessageUserId(item.sender);
+      const recipientId = getMessageUserId(item.recipient);
+
+      return senderId !== user?._id || recipientId !== user?._id;
+    });
+
+    if (!partnerMessage) return;
+
+    const senderId = getMessageUserId(partnerMessage.sender);
+    const recipientId = getMessageUserId(partnerMessage.recipient);
+    const nextPartnerId = senderId === user?._id ? recipientId : senderId;
+
+    if (nextPartnerId) {
+      setPartnerUserId(nextPartnerId);
+    }
+  };
 
   const markMessagesRead = async () => {
     if (!chatPartnerId) return;
@@ -56,7 +81,9 @@ export default function ChatScreen() {
       const token = await AsyncStorage.getItem("token");
       const res = await API.get(`${ENDPOINTS.CHAT.MESSAGES}/${chatPartnerId}`, undefined, token ?? undefined);
       console.log('After fetchMessages for', chatPartnerId);
-      setMessages(res.data || res || []);
+      const fetchedMessages = res.data || res || [];
+      setMessages(fetchedMessages);
+      updatePartnerUserIdFromMessages(fetchedMessages);
       markMessagesRead();
     } catch (error) {
       console.log("Fetch error:", error);
@@ -73,8 +100,6 @@ export default function ChatScreen() {
         connectSocket(token);
       }
     };
-
-    setupSocket();
 
       const handleNewMessage = (message: Message & { senderUser?: { email?: string }; recipientUser?: { email?: string } }) => {
         const senderId = getMessageUserId(message.sender);
@@ -95,6 +120,9 @@ export default function ChatScreen() {
           message.recipientUser?.email === chatPartnerId;
 
         if (isCurrentChat) {
+          if (senderId && senderId !== user?._id) {
+            setPartnerUserId(senderId);
+          }
           setMessages((prev) => {
             const alreadyExists = prev.some((item) =>
               item._id === message._id ||
@@ -113,6 +141,30 @@ export default function ChatScreen() {
 
       socket.on("newMessage", handleNewMessage);
       socket.on("receiveMessage", handleNewMessage);
+
+      const handleOnlineUsers = (userIds: string[]) => {
+        setOnlineUserIds(new Set(userIds));
+      };
+
+      const handleUserOnline = (userId: string) => {
+        setOnlineUserIds((prev) => {
+          const next = new Set(prev);
+          next.add(userId);
+          return next;
+        });
+      };
+
+      const handleUserOffline = (userId: string) => {
+        setOnlineUserIds((prev) => {
+          const next = new Set(prev);
+          next.delete(userId);
+          return next;
+        });
+      };
+
+      socket.on("onlineUsers", handleOnlineUsers);
+      socket.on("userOnline", handleUserOnline);
+      socket.on("userOffline", handleUserOffline);
 
       const handleMessagesRead = (data: { readBy?: string }) => {
         setMessages((prev) => prev.map((item) => {
@@ -153,13 +205,26 @@ export default function ChatScreen() {
         }
       };
 
-      socket.on("connect", retryPendingMessages);
+      const handleSocketConnect = () => {
+        retryPendingMessages();
+        socket.emit("getOnlineUsers");
+      };
 
-    return () => {
+      socket.on("connect", handleSocketConnect);
+
+      setupSocket();
+      if (socket.connected) {
+        socket.emit("getOnlineUsers");
+      }
+
+      return () => {
       socket.off("newMessage", handleNewMessage);
       socket.off("receiveMessage", handleNewMessage);
+      socket.off("onlineUsers", handleOnlineUsers);
+      socket.off("userOnline", handleUserOnline);
+      socket.off("userOffline", handleUserOffline);
       socket.off("messagesRead", handleMessagesRead);
-      socket.off("connect", retryPendingMessages);
+      socket.off("connect", handleSocketConnect);
     };
   }, [chatPartnerId, messages, user?._id, user?.email]);
 
@@ -222,6 +287,11 @@ export default function ChatScreen() {
     const isMyMessage =
       getMessageUserId(item.sender) === user?._id ||
       getMessageUserEmail(item.sender) === user?.email;
+    const attachments = Array.isArray(item.attachments) && item.attachments.length > 0
+      ? item.attachments
+      : Array.isArray(item.attachment?.images)
+        ? item.attachment.images
+        : [];
 
     return (
       <View
@@ -230,16 +300,13 @@ export default function ChatScreen() {
           isMyMessage ? styles.myMessage : styles.otherMessage,
         ]}
       >
-        {item.attachments && Array.isArray(item.attachments) && item.attachments.length > 0 ? (
+        {attachments.length > 0 ? (
           <View style={{ gap: 8 }}>
-            {item.attachments.map((att: any, idx: number) => (
+            {attachments.map((att: any, idx: number) => (
               <View key={`${att.filename || att.publicId || idx}-${idx}`}>
-                {att.contentType && typeof att.contentType === "string" && att.contentType.startsWith("image") ? (
+                {att.contentType && typeof att.contentType === "string" && att.contentType.startsWith("image") && att.url ? (
                   <View style={{ width: 220, height: 160, backgroundColor: "#E5E7EB", borderRadius: 10, overflow: "hidden" }}>
-                    {/* Using <Image> would require import; for now we show URL as text if Image import is missing */}
-                    <Text numberOfLines={4} style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
-                      {att.url}
-                    </Text>
+                    <Image source={{ uri: att.url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
                   </View>
                 ) : (
                   <Text numberOfLines={2} style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
@@ -278,6 +345,9 @@ export default function ChatScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{chatPartnerId}</Text>
+        <Text style={[styles.headerStatus, !isPartnerOnline && styles.headerStatusOffline]}>
+          {isPartnerOnline ? "Online" : "Offline"}
+        </Text>
       </View>
 
       {/* Messages */}
@@ -328,6 +398,14 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "600",
+  },
+  headerStatus: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 13,
+    marginTop: 4,
+  },
+  headerStatusOffline: {
+    color: "rgba(255,255,255,0.6)",
   },
   messageContainer: {
     maxWidth: "75%",

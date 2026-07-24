@@ -39,14 +39,20 @@ export const emitStopTyping = (recipientId: string, conversationId?: string) => 
 export const sendSocketMessage = (
   recipient: string,
   content: string,
+  attachments: any[] = [],
   callback?: (response: { ok: boolean; message?: any }) => void
 ) => {
-  socket.emit("sendMessage", { recipient, content }, callback);
+  const payload = attachments.length > 0
+    ? { recipient, content, attachments, attachment: { images: attachments } }
+    : { recipient, content, attachments };
+
+  socket.emit("sendMessage", payload, callback);
 };
 
 export const sendSocketMessageAsync = (
   recipient: string,
-  content: string
+  content: string,
+  attachments: any[] = []
 ): Promise<{ ok: boolean; message?: any }> => {
   return new Promise((resolve) => {
     if (!socket.connected) {
@@ -54,7 +60,11 @@ export const sendSocketMessageAsync = (
       return;
     }
 
-    socket.timeout(2500).emit("sendMessage", { recipient, content }, (error: Error | null, response: any) => {
+    const payload = attachments.length > 0
+      ? { recipient, content, attachments, attachment: { images: attachments } }
+      : { recipient, content, attachments };
+
+    socket.timeout(2500).emit("sendMessage", payload, (error: Error | null, response: any) => {
       if (error) {
         resolve({ ok: false, message: error.message || "Socket message timeout" });
         return;

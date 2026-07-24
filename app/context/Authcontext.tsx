@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useEffect, useState } from "react";
 import { ENDPOINTS } from "../services/api/endpoints";
 import API from "../services/api/method";
+import { disconnectSocket } from "../services/socket";
 
 interface User {
   _id: string;
@@ -89,6 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     try {
+      disconnectSocket();
       await AsyncStorage.removeItem("token");
       await AsyncStorage.removeItem("user");
       setUser(null);
