@@ -20,6 +20,7 @@ import {
 } from "react-native";
 import { ENDPOINTS } from "../services/api/endpoints";
 import API from "../services/api/method";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Register() {
   const { width } = useWindowDimensions();
@@ -236,7 +237,7 @@ export default function Register() {
   });
 
   return (
-    <View style={[styles.container, !isWideLayout && styles.containerMobile]}>
+    <SafeAreaView style={[styles.container, !isWideLayout && styles.containerMobile]}>
       <View style={styles.backgroundBase} pointerEvents="none">
         <Animated.View
           style={[
@@ -549,7 +550,7 @@ export default function Register() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 

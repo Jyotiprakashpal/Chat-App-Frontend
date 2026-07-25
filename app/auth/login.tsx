@@ -21,6 +21,7 @@ import {
 import { AuthContext } from "../context/Authcontext";
 import { ENDPOINTS } from "../services/api/endpoints";
 import API from "../services/api/method";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const appVersion = Constants.expoConfig?.version;
 
@@ -182,7 +183,7 @@ export default function Index() {
   });
 
   return (
-    <View style={[styles.container, !isWideLayout && styles.containerMobile]}>
+    <SafeAreaView style={[styles.container, !isWideLayout && styles.containerMobile]}>
       <View style={styles.backgroundBase} pointerEvents="none">
         <Animated.View
           style={[
@@ -444,7 +445,7 @@ export default function Index() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
