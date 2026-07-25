@@ -8,12 +8,14 @@ interface User {
   _id: string;
   name: string;
   email: string;
+  profileImage?: { publicId: string; url: string };
   token: string;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
+  updateUser: (userData: Partial<User>) => void;
   logout: () => Promise<void>;
   isLoading: boolean;
 }
@@ -21,6 +23,7 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType>({
   user: null,
   login: async () => {},
+  updateUser: () => {},
   logout: async () => {},
   isLoading: true,
 });
@@ -88,6 +91,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const updateUser = async (userData: Partial<User>) => {
+    setUser(prevUser => {
+      if (!prevUser) return null;
+      const updatedUser = { ...prevUser, ...userData };
+      AsyncStorage.setItem("user", JSON.stringify(updatedUser));
+      return updatedUser;
+    });
+  };
+
+
   const logout = async () => {
     try {
       disconnectSocket();
@@ -99,7 +112,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, logout, isLoading, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

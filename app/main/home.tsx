@@ -3,27 +3,28 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Easing,
-  FlatList,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Easing,
+    FlatList,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthContext } from "../context/Authcontext";
 import LogoutPopup from "../Popup/logout";
+import ProfileModal from "../Popup/ProfileModal";
 import { ENDPOINTS } from "../services/api/endpoints";
 import API from "../services/api/method";
 import { uploadMedia } from "../services/api/uploadMedia";
@@ -164,6 +165,7 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [usersModalVisible, setUsersModalVisible] = useState<boolean>(false);
   const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [logoutVisible, setLogoutVisible] = useState(false);
 
   // Ã¢Å“â€¦ Logout popup state
@@ -215,6 +217,9 @@ export default function Home() {
     switch (action) {
       case 'newChat':
         setUsersModalVisible(true);
+        break;
+      case 'profile':
+        setProfileModalVisible(true);
         break;
       case 'logout':
         setLogoutVisible(true);
@@ -1326,8 +1331,14 @@ export default function Home() {
           <View style={styles.sidebar}>
 
             <View style={styles.sidebarIconsGroup}>
-              <TouchableOpacity style={styles.profileIcon}>
-                <Ionicons name="person-circle-outline" size={36} color="#4F46E5" />
+              <TouchableOpacity style={styles.profileIcon} onPress={() => setProfileModalVisible(true)}>
+                {authUser?.profileImage?.url ? (
+                  <Image source={{ uri: authUser.profileImage.url }} style={styles.profileImage} />
+                ) : (
+                  <View style={styles.profileImagePlaceholder}>
+                    <Ionicons name="person" size={24} color="#4F46E5" />
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.sidebarIconBtn}
@@ -1590,6 +1601,11 @@ export default function Home() {
         onClose={() => setLogoutVisible(false)}
       />
       </SafeAreaView>
+
+      <ProfileModal
+        visible={profileModalVisible}
+        onClose={() => setProfileModalVisible(false)}
+      />
     </SafeAreaProvider>
   );
 }
@@ -1656,6 +1672,20 @@ const styles = StyleSheet.create({
   },
   profileIcon: {
     padding: 8,
+    marginBottom: 8,
+  },
+  profileImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  profileImagePlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sidebarIconBtn: {
     width: 56,
@@ -2426,8 +2456,3 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
 });
-
-
-
-
-

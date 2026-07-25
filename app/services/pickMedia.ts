@@ -22,7 +22,7 @@ const ensureFileExtension = (name: string, mimeType?: string, fallback = "bin") 
   return `${name}.${extensionFromMimeType(mimeType, fallback)}`;
 };
 
-export const pickImageFiles = async (): Promise<PickedMediaFile[] | null> => {
+export const pickImageFiles = async (options?: { allowsMultipleSelection?: boolean }): Promise<PickedMediaFile[] | null> => {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
     throw new Error("Media library permission is required to upload media");
@@ -30,7 +30,7 @@ export const pickImageFiles = async (): Promise<PickedMediaFile[] | null> => {
 
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images", "videos"],
-    allowsMultipleSelection: true,
+    allowsMultipleSelection: options?.allowsMultipleSelection ?? true,
     quality: 0.9,
   });
 

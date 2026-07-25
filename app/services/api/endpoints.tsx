@@ -25,9 +25,10 @@ export const ENDPOINTS = {
   },
   // User endpoints
   USER: {
-    GET_PROFILE: '/user/profile',
-    UPDATE_PROFILE: '/user/profile',
+    GET_PROFILE: '/users/me/profile-image',
+    UPDATE_PROFILE: '/users/me/profile-image',
     GET_USERS: '/auth/users',
+    DELETE_PROFILE: '/users/me/profile-image',
   },
 };
 
