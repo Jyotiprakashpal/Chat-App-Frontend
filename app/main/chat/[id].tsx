@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthContext } from "../../context/Authcontext";
 import ENDPOINTS from "../../services/api/endpoints";
 import API from "../../services/api/method";
@@ -338,10 +339,11 @@ export default function ChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{chatPartnerId}</Text>
@@ -379,7 +381,8 @@ export default function ChatScreen() {
           <Ionicons name="send" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -387,6 +390,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F1F5F9",
+  },
+  keyboardView: {
+    flex: 1,
   },
   header: {
     paddingTop: 50,

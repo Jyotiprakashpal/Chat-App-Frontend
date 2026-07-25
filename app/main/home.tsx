@@ -1067,14 +1067,14 @@ export default function Home() {
   );
 
   // Ã¢Å“â€¦ Mobile Menu Modal
-  const renderMobileMenu = () => (
+const renderMobileMenu = () => (
     <>
       <TouchableOpacity
         style={styles.menuBackdrop}
         activeOpacity={1}
         onPress={() => setMobileMenuVisible(false)}
       />
-      <View style={styles.mobileMenu}>
+      <SafeAreaView edges={['right', 'bottom']} style={styles.mobileMenu}>
         <View style={styles.mobileMenuHeader}>
           <Text style={styles.mobileMenuTitle}>Menu</Text>
           <TouchableOpacity onPress={() => setMobileMenuVisible(false)}>
@@ -1110,6 +1110,7 @@ export default function Home() {
             <Ionicons name="notifications-outline" size={24} color="#64748B" />
             <Text style={styles.mobileMenuItemText}>Notifications</Text>
           </TouchableOpacity>
+          <View style={styles.menuDivider} />
           <TouchableOpacity
             style={styles.mobileMenuItem}
             onPress={() => handleMobileMenuItemPress('settings')}
@@ -1117,7 +1118,8 @@ export default function Home() {
             <Ionicons name="settings-outline" size={24} color="#64748B" />
             <Text style={styles.mobileMenuItemText}>Settings</Text>
           </TouchableOpacity>
-          <View style={styles.menuDivider} />
+        </View>
+        <View style={styles.mobileMenuFooter}>
           <TouchableOpacity
             style={styles.mobileMenuLogout}
             onPress={() => handleMobileMenuItemPress('logout')}
@@ -1126,7 +1128,7 @@ export default function Home() {
             <Text style={styles.mobileMenuLogoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     </>
   );
 
@@ -1138,7 +1140,7 @@ export default function Home() {
         activeOpacity={1}
         onPress={handleBackToConversations}
       />
-      <View style={styles.mobileChatContainer}>
+      <SafeAreaView style={styles.mobileChatContainer}>
         <View style={styles.mobileChatHeader}>
           <TouchableOpacity
             style={styles.backButton}
@@ -1276,7 +1278,7 @@ export default function Home() {
           </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </SafeAreaView>
     </>
   );
 
@@ -2239,7 +2241,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     zIndex: 1000,
   },
   mobileMenu: {
@@ -2247,61 +2249,71 @@ const styles = StyleSheet.create({
     top: 0,
     right: 0,
     width: 280,
-    height: '100%',
+    flex: 1,
     backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 4, height: 0 },
+    shadowOffset: { width: -4, height: 0 },
     shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 16,
+    elevation: 12,
     zIndex: 1001,
+    overflow: 'hidden',
   },
   mobileMenuHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
   mobileMenuTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#0F172A',
   },
   mobileMenuItems: {
-    flex: 1,
     paddingTop: 8,
   },
   mobileMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 15,
     gap: 16,
   },
   mobileMenuItemText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#1E293B',
     flex: 1,
+    fontWeight: '500',
   },
   menuDivider: {
     height: 1,
     backgroundColor: '#F1F5F9',
     marginHorizontal: 20,
+    marginVertical: 4,
+  },
+  mobileMenuFooter: {
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingVertical: 8,
   },
   mobileMenuLogout: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 15,
     gap: 16,
   },
   mobileMenuLogoutText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#EF4444',
-    fontWeight: '500',
+    fontWeight: '600',
   },
 
   chatBackdrop: {
