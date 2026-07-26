@@ -7,6 +7,7 @@ import {
   Alert,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   RefreshControl,
@@ -1091,144 +1092,151 @@ const renderMobileMenu = () => (
         activeOpacity={1}
         onPress={handleBackToConversations}
       />
-      <SafeAreaView style={styles.mobileChatContainer}>
-        <View style={styles.mobileChatHeader}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={handleBackToConversations}
-          >
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          {selectedUser && (
-            <>
-              <View style={styles.mobileChatHeaderInfo}>
-                <Text style={styles.mobileChatHeaderName}>{selectedUser.name}</Text>
-                <Text style={[styles.mobileChatHeaderStatus, !selectedUserIsOnline && styles.offlineStatusText]}>
-                  {selectedUserIsOnline ? "Online" : "Offline"}
-                </Text>
-              </View>
-              <View style={styles.mobileChatHeaderAvatar}>
-                <Text style={styles.mobileChatHeaderAvatarText}>
-                  {selectedUser.name.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            </>
-          )}
-        </View>
-
-        <View style={styles.mobileMessagesContainer}>
-          {chatMessages.length === 0 ? (
-            <View style={styles.noMessages}>
-              <Ionicons name="chatbubble-outline" size={64} color="#CBD5E1" />
-              <Text style={styles.noMessagesText}>No messages yet</Text>
-              <Text style={styles.noMessagesSubtext}>
-                Start a conversation with {selectedUser?.name}
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={chatMessages}
-              keyExtractor={(item, index) => `${item._id}-${index}`}
-              renderItem={({ item, index }) => {
-                const isMyMessage =
-                  getMessageUserId(item.sender) === authUser?._id ||
-                  getMessageUserEmail(item.sender) === authUser?.email;
-                const showDateHeader = index === chatMessages.length - 1 || 
-                  getDateHeader(chatMessages[index].createdAt) !== getDateHeader(chatMessages[index + 1]?.createdAt || '');
-                
-                return (
-                  <View>
-                    {showDateHeader && (
-                      <View style={styles.dateHeaderContainer}>
-                        <Text style={styles.dateHeaderText}>
-                          {getDateHeader(chatMessages[index].createdAt)}
-                        </Text>
-                      </View>
-                    )}
-                    <TouchableOpacity
-                      style={[
-                        styles.messageContainer,
-                        isMyMessage ? styles.myMessage : styles.otherMessage,
-                      ]}
-                      activeOpacity={0.9}
-                      onPress={() => openMessageActions(item, isMyMessage)}
-                      onLongPress={() => handleMessageLongPress(item, isMyMessage)}
-                      delayLongPress={350}
-                      {...(Platform.OS === "web" ? {
-                        onContextMenu: (event: any) => {
-                          event.preventDefault();
-                          handleMessageLongPress(item, isMyMessage);
-                        },
-                      } : {})}
-                    >
-                      {renderMessageContent(item, isMyMessage)}
-                      <View style={[styles.messageFooter, isMyMessage ? styles.myMessageFooter : styles.otherMessageFooter]}>
-                        {getMessageActionTarget(item, isMyMessage) && (
-                          <TouchableOpacity
-                            style={styles.messageMenuButton}
-                            onPress={() => openMessageActions(item, isMyMessage)}
-                          >
-                            <Ionicons name="chevron-down" size={14} color={isMyMessage ? "#EEF2FF" : "#64748B"} />
-                          </TouchableOpacity>
-                        )}
-                        <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
-                          {formatTime(item.createdAt)}
-                        </Text>
-                        {isMyMessage && (
-                          <Ionicons
-                            name={isPendingMessage(item) ? "time-outline" : "checkmark-done"}
-                            size={14}
-                            color={item.read || item.status === "read" ? "#38BDF8" : isPendingMessage(item) ? "#64748B" : "#111827"}
-                          />
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  </View>
-                );
-              }}
-              contentContainerStyle={styles.messagesList}
-              showsVerticalScrollIndicator={false}
-              inverted
-            />
-          )}
-        </View>
-
-        <View style={styles.mobileChatInputContainer}>
-          {renderEditingBanner()}
-          {renderSelectedMediaPreview()}
-          <View style={styles.inputRow}>
-          <View style={styles.mobileInputShell}>
-            <TextInput
-              style={styles.mobileChatInput}
-            placeholder="Type a message..."
-            placeholderTextColor="#94A3B8"
-            value={message}
-            onChangeText={setMessage}
-            onSubmitEditing={handleSendMessage}
-            returnKeyType="send"
-            blurOnSubmit={false}
-            />
+      <SafeAreaView edges={["top", "left", "right"]} style={styles.mobileChatContainer}>
+        <KeyboardAvoidingView
+          style={styles.mobileChatKeyboardView}
+          behavior="padding"
+          keyboardVerticalOffset={0}
+        >
+          <View style={styles.mobileChatHeader}>
             <TouchableOpacity
-              style={styles.mediaPickerButton}
-              onPress={handlePickAndUploadMedia}
-              disabled={isUploadingMedia || Boolean(editingMessage)}
+              style={styles.backButton}
+              onPress={handleBackToConversations}
             >
-              {isUploadingMedia ? ( 
-                <ActivityIndicator size="small" color="#14B8A6" />
-              ) : (
-                <Ionicons name="image-outline" size={21} color="#14B8A6" />
-              )} 
+              <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
+            {selectedUser && (
+              <>
+                <View style={styles.mobileChatHeaderInfo}>
+                  <Text style={styles.mobileChatHeaderName}>{selectedUser.name}</Text>
+                  <Text style={[styles.mobileChatHeaderStatus, !selectedUserIsOnline && styles.offlineStatusText]}>
+                    {selectedUserIsOnline ? "Online" : "Offline"}
+                  </Text>
+                </View>
+                <View style={styles.mobileChatHeaderAvatar}>
+                  <Text style={styles.mobileChatHeaderAvatarText}>
+                    {selectedUser.name.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              </>
+            )}
           </View>
-          <TouchableOpacity
-            style={[styles.mobileSendButton, !message.trim() && selectedMediaFiles.length === 0 && styles.sendButtonDisabled]}
-            onPress={handleSendMessage}
-            disabled={(!message.trim() && selectedMediaFiles.length === 0) || isUploadingMedia}
-          >
-            <Ionicons name="send" size={20} color="#fff" />
-          </TouchableOpacity>
+
+          <View style={styles.mobileMessagesContainer}>
+            {chatMessages.length === 0 ? (
+              <View style={styles.noMessages}>
+                <Ionicons name="chatbubble-outline" size={64} color="#CBD5E1" />
+                <Text style={styles.noMessagesText}>No messages yet</Text>
+                <Text style={styles.noMessagesSubtext}>
+                  Start a conversation with {selectedUser?.name}
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={chatMessages}
+                keyExtractor={(item, index) => `${item._id}-${index}`}
+                renderItem={({ item, index }) => {
+                  const isMyMessage =
+                    getMessageUserId(item.sender) === authUser?._id ||
+                    getMessageUserEmail(item.sender) === authUser?.email;
+                  const showDateHeader = index === chatMessages.length - 1 ||
+                    getDateHeader(chatMessages[index].createdAt) !== getDateHeader(chatMessages[index + 1]?.createdAt || '');
+
+                  return (
+                    <View>
+                      {showDateHeader && (
+                        <View style={styles.dateHeaderContainer}>
+                          <Text style={styles.dateHeaderText}>
+                            {getDateHeader(chatMessages[index].createdAt)}
+                          </Text>
+                        </View>
+                      )}
+                      <TouchableOpacity
+                        style={[
+                          styles.messageContainer,
+                          isMyMessage ? styles.myMessage : styles.otherMessage,
+                        ]}
+                        activeOpacity={0.9}
+                        onPress={() => openMessageActions(item, isMyMessage)}
+                        onLongPress={() => handleMessageLongPress(item, isMyMessage)}
+                        delayLongPress={350}
+                        {...(Platform.OS === "web" ? {
+                          onContextMenu: (event: any) => {
+                            event.preventDefault();
+                            handleMessageLongPress(item, isMyMessage);
+                          },
+                        } : {})}
+                      >
+                        {renderMessageContent(item, isMyMessage)}
+                        <View style={[styles.messageFooter, isMyMessage ? styles.myMessageFooter : styles.otherMessageFooter]}>
+                          {getMessageActionTarget(item, isMyMessage) && (
+                            <TouchableOpacity
+                              style={styles.messageMenuButton}
+                              onPress={() => openMessageActions(item, isMyMessage)}
+                            >
+                              <Ionicons name="chevron-down" size={14} color={isMyMessage ? "#EEF2FF" : "#64748B"} />
+                            </TouchableOpacity>
+                          )}
+                          <Text style={isMyMessage ? styles.messageTime : styles.otherMessageTime}>
+                            {formatTime(item.createdAt)}
+                          </Text>
+                          {isMyMessage && (
+                            <Ionicons
+                              name={isPendingMessage(item) ? "time-outline" : "checkmark-done"}
+                              size={14}
+                              color={item.read || item.status === "read" ? "#38BDF8" : isPendingMessage(item) ? "#64748B" : "#111827"}
+                            />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                }}
+                contentContainerStyle={styles.messagesList}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                inverted
+              />
+            )}
           </View>
-        </View>
+
+          <View style={styles.mobileChatInputContainer}>
+            {renderEditingBanner()}
+            {renderSelectedMediaPreview()}
+            <View style={styles.inputRow}>
+              <View style={styles.mobileInputShell}>
+                <TextInput
+                  style={styles.mobileChatInput}
+                  placeholder="Type a message..."
+                  placeholderTextColor="#94A3B8"
+                  value={message}
+                  onChangeText={setMessage}
+                  onSubmitEditing={handleSendMessage}
+                  returnKeyType="send"
+                  blurOnSubmit={false}
+                />
+                <TouchableOpacity
+                  style={styles.mediaPickerButton}
+                  onPress={handlePickAndUploadMedia}
+                  disabled={isUploadingMedia || Boolean(editingMessage)}
+                >
+                  {isUploadingMedia ? (
+                    <ActivityIndicator size="small" color="#14B8A6" />
+                  ) : (
+                    <Ionicons name="image-outline" size={21} color="#14B8A6" />
+                  )}
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={[styles.mobileSendButton, !message.trim() && selectedMediaFiles.length === 0 && styles.sendButtonDisabled]}
+                onPress={handleSendMessage}
+                disabled={(!message.trim() && selectedMediaFiles.length === 0) || isUploadingMedia}
+              >
+                <Ionicons name="send" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </>
   );
@@ -1801,11 +1809,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   chatMessagesList: {
-    paddingBottom: 80,
+    paddingBottom: 28,
   },
   chatMessageContainer: {
     maxWidth: '75%',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   chatMyMessage: {
     alignSelf: 'flex-end',
@@ -1883,7 +1891,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginTop: 2,
+    marginTop: 1,
   },
   messageMenuButton: {
     width: 22,
@@ -1899,13 +1907,14 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   messagesList: {
-    paddingBottom: 80,
+    paddingBottom: 24,
+    paddingTop: 8,
   },
   messageContainer: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 3,
     maxWidth: "75%",
-    marginBottom: 6,
+    marginBottom: 3,
   },
   myMessage: {
     alignSelf: "flex-end",
@@ -1917,17 +1926,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#14B8A6",
     color: "#fff",
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 18,
-    marginBottom: 2,
+    marginBottom: 1,
+    lineHeight: 20,
   },
   otherMessageText: {
     backgroundColor: "#E5E7EB",
     color: "#1E293B",
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 18,
-    marginBottom: 2,
+    marginBottom: 1,
+    lineHeight: 20,
   },
   messageTime: {
     fontSize: 10,
@@ -2216,6 +2227,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     zIndex: 2001,
   },
+  mobileChatKeyboardView: {
+    flex: 1,
+  },
   mobileChatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2332,7 +2346,7 @@ const styles = StyleSheet.create({
 
   dateHeaderContainer: {
     alignItems: 'center',
-    marginVertical: 12,
+    marginVertical: 8,
     marginHorizontal: 24,
   },
   dateHeaderText: {

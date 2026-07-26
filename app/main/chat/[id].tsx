@@ -6,7 +6,6 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -339,48 +338,51 @@ export default function ChatScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.container}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
+        keyboardVerticalOffset={0}
       >
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{chatPartnerId}</Text>
-        <Text style={[styles.headerStatus, !isPartnerOnline && styles.headerStatusOffline]}>
-          {isPartnerOnline ? "Online" : "Offline"}
-        </Text>
-      </View>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>{chatPartnerId}</Text>
+          <Text style={[styles.headerStatus, !isPartnerOnline && styles.headerStatusOffline]}>
+            {isPartnerOnline ? "Online" : "Offline"}
+          </Text>
+        </View>
 
-      {/* Messages */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item._id}
-        renderItem={renderItem}
-        contentContainerStyle={{ padding: 16 }}
-        onContentSizeChange={() =>
-          flatListRef.current?.scrollToEnd({ animated: true })
-        }
-      />
-
-      {/* Input */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          placeholder="Type a message..."
-          value={text}
-          onChangeText={setText}
-          style={styles.input}
+        {/* Messages */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item._id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.messagesContent}
+          style={styles.flatList}
+          keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() =>
+            flatListRef.current?.scrollToEnd({ animated: true })
+          }
         />
 
-        <TouchableOpacity 
-          style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]} 
-          onPress={handleSend}
-          disabled={!text.trim()}
-        >
-          <Ionicons name="send" size={20} color="#fff" />
-        </TouchableOpacity>
-      </View>
+        {/* Input */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            placeholder="Type a message..."
+            value={text}
+            onChangeText={setText}
+            style={styles.input}
+          />
+
+          <TouchableOpacity
+            style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
+            onPress={handleSend}
+            disabled={!text.trim()}
+          >
+            <Ionicons name="send" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -393,6 +395,13 @@ const styles = StyleSheet.create({
   },
   keyboardView: {
     flex: 1,
+  },
+  flatList: {
+    flex: 1,
+  },
+  messagesContent: {
+    padding: 16,
+    paddingBottom: 10,
   },
   header: {
     paddingTop: 50,
@@ -415,9 +424,10 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     maxWidth: "75%",
-    padding: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderRadius: 14,
-    marginBottom: 10,
+    marginBottom: 5,
   },
   myMessage: {
     alignSelf: "flex-end",
@@ -433,10 +443,12 @@ const styles = StyleSheet.create({
   myMessageText: {
     color: "#fff",
     fontSize: 15,
+    lineHeight: 20,
   },
   otherMessageText: {
     color: "#1E293B",
     fontSize: 15,
+    lineHeight: 20,
   },
   messageTime: {
     color: "rgba(255,255,255,0.7)",
@@ -452,7 +464,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginTop: 4,
+    marginTop: 2,
   },
   myMessageFooter: {
     justifyContent: "flex-end",
