@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 15,
     alignItems: "center",
-    backgroundColor: "#4F46E5",
+    backgroundColor: "#14B8A6",
   },
   headerTitle: {
     color: "#fff",
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
   },
   myMessage: {
     alignSelf: "flex-end",
-    backgroundColor: "#4F46E5",
+    backgroundColor: "#14B8A6",
   },
   otherMessage: {
     alignSelf: "flex-start",
@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     marginLeft: 10,
-    backgroundColor: "#4F46E5",
+    backgroundColor: "#14B8A6",
     padding: 10,
     borderRadius: 20,
   },

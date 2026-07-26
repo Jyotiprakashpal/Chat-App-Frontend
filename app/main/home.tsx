@@ -1,23 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Easing,
-    FlatList,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View
 } from "react-native";
 
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -108,53 +106,6 @@ export default function Home() {
   const { logout, user: authUser } = useContext(AuthContext);
   const { width } = useWindowDimensions();
   const isTabletOrWeb = width >= 768;
-
-  const backgroundDrift = useRef(new Animated.Value(0)).current;
-  const backgroundPulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const driftAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(backgroundDrift, {
-          toValue: 1,
-          duration: 9000,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(backgroundDrift, {
-          toValue: 0,
-          duration: 9000,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    const pulseAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(backgroundPulse, {
-          toValue: 1,
-          duration: 4200,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(backgroundPulse, {
-          toValue: 0,
-          duration: 4200,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    driftAnimation.start();
-    pulseAnimation.start();
-
-    return () => {
-      driftAnimation.stop();
-      pulseAnimation.stop();
-    };
-  }, [backgroundDrift, backgroundPulse]);
 
 
   // States
@@ -515,7 +466,7 @@ export default function Home() {
 
     return (
       <View style={styles.editingBanner}>
-        <Ionicons name="create-outline" size={18} color="#4F46E5" />
+        <Ionicons name="create-outline" size={18} color="#14B8A6" />
         <Text numberOfLines={1} style={styles.editingBannerText}>Editing message</Text>
         <TouchableOpacity onPress={cancelEditingMessage} style={styles.editingCancelButton}>
           <Ionicons name="close" size={18} color="#64748B" />
@@ -621,8 +572,8 @@ export default function Home() {
                 delayLongPress={350}
                 {...(Platform.OS === "web" ? {
                   onContextMenu: (event: any) => {
-                    event.preventDefault();
-                    handleAttachmentLongPress(item, attachment, isMyMessage);
+                    event.preventDefault(); 
+                    handleAttachmentLongPress(item, attachment, isMyMessage) 
                   },
                 } : {})}
               >
@@ -636,15 +587,15 @@ export default function Home() {
                 delayLongPress={350}
                 {...(Platform.OS === "web" ? {
                   onContextMenu: (event: any) => {
-                    event.preventDefault();
-                    handleAttachmentLongPress(item, attachment, isMyMessage);
+                    event.preventDefault(); 
+                    handleAttachmentLongPress(item, attachment, isMyMessage) 
                   },
                 } : {})}
               >
                 <Ionicons
                   name={attachment.resourceType === "video" || attachment.contentType?.startsWith("video") ? "videocam" : "document-attach"}
                   size={16}
-                  color={isMyMessage ? "#EEF2FF" : "#4F46E5"}
+                  color={isMyMessage ? "#CCFBF1" : "#14B8A6"}
                 />
                 <Text numberOfLines={1} style={attachmentTextStyle}>
                   {attachment.filename || attachment.url || "Uploaded media"}
@@ -680,7 +631,7 @@ export default function Home() {
                 <Image source={{ uri: file.uri }} style={styles.selectedMediaImage} />
               ) : (
                 <View style={styles.selectedMediaFile}>
-                  <Ionicons name="videocam" size={24} color="#4F46E5" />
+                  <Ionicons name="videocam" size={24} color="#14B8A6" />
                 </View>
               )}
               <TouchableOpacity
@@ -1048,7 +999,7 @@ export default function Home() {
   if (loading && !refreshing) {
     return (
       <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color="#14B8A6" />
       </View>
     );
   }
@@ -1086,14 +1037,14 @@ const renderMobileMenu = () => (
             style={styles.mobileMenuItem}
             onPress={() => handleMobileMenuItemPress('profile')}
           >
-            <Ionicons name="person-circle-outline" size={24} color="#4F46E5" />
+            <Ionicons name="person-circle-outline" size={24} color="#14B8A6" />
             <Text style={styles.mobileMenuItemText}>Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.mobileMenuItem}
             onPress={() => handleMobileMenuItemPress('newChat')}
           >
-            <Ionicons name="chatbubble-ellipses-outline" size={24} color="#4F46E5" />
+            <Ionicons name="chatbubble-ellipses-outline" size={24} color="#14B8A6" />
             <Text style={styles.mobileMenuItemText}>New Chat</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -1262,11 +1213,11 @@ const renderMobileMenu = () => (
               onPress={handlePickAndUploadMedia}
               disabled={isUploadingMedia || Boolean(editingMessage)}
             >
-              {isUploadingMedia ? (
-                <ActivityIndicator size="small" color="#4F46E5" />
+              {isUploadingMedia ? ( 
+                <ActivityIndicator size="small" color="#14B8A6" />
               ) : (
-                <Ionicons name="image-outline" size={21} color="#4F46E5" />
-              )}
+                <Ionicons name="image-outline" size={21} color="#14B8A6" />
+              )} 
             </TouchableOpacity>
           </View>
           <TouchableOpacity
@@ -1282,52 +1233,10 @@ const renderMobileMenu = () => (
     </>
   );
 
-  const backgroundStyles = [styles.backgroundBase];
   return (
 
     <SafeAreaProvider>
       <SafeAreaView style={[styles.container, isTabletOrWeb && styles.containerLarge]}>
-        <View style={backgroundStyles} pointerEvents="none">
-          <Animated.View
-            style={[
-              styles.backgroundBand,
-              styles.backgroundBandPrimary,
-              {
-                opacity: isTabletOrWeb ? 0.32 : 0.5,
-                transform: [
-                  { translateX: backgroundDrift.interpolate({ inputRange: [0, 1], outputRange: [-42, 34] }) },
-                  { rotate: "-16deg" },
-                ],
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.backgroundBand,
-              styles.backgroundBandSecondary,
-              {
-                opacity: isTabletOrWeb ? 0.28 : 0.42,
-                transform: [
-                  { translateX: backgroundDrift.interpolate({ inputRange: [0, 1], outputRange: [38, -28] }) },
-                  { rotate: "18deg" },
-                ],
-              },
-            ]}
-          />
-          <Animated.View
-            style={[
-              styles.backgroundGlow,
-              {
-                opacity: backgroundPulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.36] }),
-                transform: [
-                  {
-                    scale: backgroundPulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.08] }),
-                  },
-                ],
-              },
-            ]}
-          />
-        </View>
         {isTabletOrWeb ? (
         <>
           <View style={styles.sidebar}>
@@ -1337,16 +1246,16 @@ const renderMobileMenu = () => (
                 {authUser?.profileImage?.url ? (
                   <Image source={{ uri: authUser.profileImage.url }} style={styles.profileImage} />
                 ) : (
-                  <View style={styles.profileImagePlaceholder}>
-                    <Ionicons name="person" size={24} color="#4F46E5" />
-                  </View>
+                  <View style={styles.profileImagePlaceholder}> 
+                    <Ionicons name="person" size={24} color="#14B8A6" />
+                  </View> 
                 )}
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.sidebarIconBtn}
+                style={[styles.sidebarIconBtn, styles.sidebarIconBtnActive]}
                 onPress={() => setUsersModalVisible(true)}
               >
-                <Ionicons name="chatbubble-ellipses-outline" size={28} color="#4F46E5" />
+                <Ionicons name="chatbubble-ellipses-outline" size={28} color="#14B8A6" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.sidebarIconBtn}>
                 <Ionicons name="people-outline" size={28} color="#64748B" />
@@ -1399,8 +1308,8 @@ const renderMobileMenu = () => (
                   <RefreshControl
                     refreshing={refreshing}
                     onRefresh={handleRefresh}
-                    colors={["#4F46E5"]}
-                    tintColor="#4F46E5"
+                    colors={["#14B8A6"]}
+                    tintColor="#14B8A6"
                   />
                 }
               />
@@ -1414,7 +1323,7 @@ const renderMobileMenu = () => (
                   <View style={styles.chatHeaderAvatar}>
                     <Text style={styles.chatHeaderAvatarText}>
                       {selectedUser.name.charAt(0).toUpperCase()}
-                    </Text>
+                    </Text> 
                   </View>
                   <View style={styles.chatHeaderInfo}>
                     <Text style={styles.chatHeaderName}>{selectedUser.name}</Text>
@@ -1519,11 +1428,11 @@ const renderMobileMenu = () => (
                       onPress={handlePickAndUploadMedia}
                       disabled={isUploadingMedia || Boolean(editingMessage)}
                     >
-                      {isUploadingMedia ? (
-                        <ActivityIndicator size="small" color="#4F46E5" />
+                      {isUploadingMedia ? ( 
+                        <ActivityIndicator size="small" color="#14B8A6" />
                       ) : (
-                        <Ionicons name="image-outline" size={21} color="#4F46E5" />
-                      )}
+                        <Ionicons name="image-outline" size={21} color="#14B8A6" />
+                      )} 
                     </TouchableOpacity>
                   </View>
                   <TouchableOpacity
@@ -1577,8 +1486,8 @@ const renderMobileMenu = () => (
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={handleRefresh}
-                  colors={["#4F46E5"]}
-                  tintColor="#4F46E5"
+                  colors={["#14B8A6"]}
+                  tintColor="#14B8A6"
                 />
               }
             />
@@ -1624,37 +1533,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
 
-  backgroundBase: {
-
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#F8FAFC",
-  },
-  backgroundBand: {
-    position: "absolute",
-    width: "130%",
-    height: 190,
-    borderRadius: 42,
-  },
-  backgroundBandPrimary: {
-    top: 44,
-    left: "-16%",
-    backgroundColor: "#CFFAFE",
-  },
-  backgroundBandSecondary: {
-    bottom: 78,
-    right: "-18%",
-    backgroundColor: "#FED7AA",
-  },
-  backgroundGlow: {
-    position: "absolute",
-    top: "26%",
-    right: "-18%",
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: "#A7F3D0",
-  },
-
   sidebar: {
 
     width: 80,
@@ -1684,7 +1562,7 @@ const styles = StyleSheet.create({
   profileImagePlaceholder: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: 28, 
     backgroundColor: '#EEF2FF',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1702,11 +1580,15 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  sidebarIconBtnActive: {
+    backgroundColor: "#CCFBF1",
+    borderColor: "#14B8A6",
+  },
   logoutBtn: {
     width: 56,
     height: 56,
     borderRadius: 20,
-    backgroundColor: "#fff",
+    backgroundColor: "#FFF1F2",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -1741,7 +1623,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#4F46E5",
+    backgroundColor: "#14B8A6",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
@@ -1797,10 +1679,10 @@ const styles = StyleSheet.create({
   editingBanner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#EEF2FF",
+    gap: 8, 
+    backgroundColor: "#F0FDFA",
     borderLeftWidth: 3,
-    borderLeftColor: "#4F46E5",
+    borderLeftColor: "#14B8A6",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -1870,7 +1752,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#E2E8F0",
   },
   actionSheetCancelText: {
-    color: "#4F46E5",
+    color: "#14B8A6",
     fontSize: 16,
     fontWeight: "700",
   },
@@ -1905,7 +1787,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#4F46E5",
+    backgroundColor: "#14B8A6",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1932,7 +1814,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   chatMyMessageText: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: '#14B8A6',
     color: '#fff',
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -1982,7 +1864,7 @@ const styles = StyleSheet.create({
     maxWidth: 240,
   },
   myAttachmentChip: {
-    backgroundColor: "#4F46E5",
+    backgroundColor: "#0F766E",
   },
   otherAttachmentChip: {
     backgroundColor: "#E5E7EB",
@@ -2032,7 +1914,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   myMessageText: {
-    backgroundColor: "#4F46E5",
+    backgroundColor: "#14B8A6",
     color: "#fff",
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -2117,7 +1999,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "#4F46E5",
+    backgroundColor: "#14B8A6",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 14,
@@ -2195,7 +2077,7 @@ const styles = StyleSheet.create({
   loader: {
     flex: 1,
     justifyContent: "center",
-    alignItems: "center",
+    alignItems: "center", 
     backgroundColor: "#F8FAFC",
   },
   emptyContainer: {
@@ -2339,7 +2221,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: '#4F46E5',
+    backgroundColor: '#14B8A6',
     elevation: 4,
   },
   backButton: {
@@ -2408,7 +2290,7 @@ const styles = StyleSheet.create({
     height: 62,
     borderRadius: 12,
     backgroundColor: '#EEF2FF',
-    justifyContent: 'center',
+    justifyContent: 'center', 
     alignItems: 'center',
   },
   removeMediaButton: {
@@ -2443,7 +2325,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#4F46E5',
+    backgroundColor: '#14B8A6',
     justifyContent: 'center',
     alignItems: 'center',
   },
